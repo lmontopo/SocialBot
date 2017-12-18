@@ -21,11 +21,10 @@ parseEvents = (results) ->
   if !results
     return "There are no upcoming social events."
   parsedResults = ["Upcoming Social Events:"]
-  for result in results
-    eventString = "#{result.name} at #{result.location} on #{result.date}."
+  for event, details of results
+    eventString = "#{event} at #{details.location} on #{details.date}."
     parsedResults.push eventString
   return parsedResults.join('\n')
-
 
 listEvents = (res) ->
   results = res.robot.brain.get('events')
@@ -35,19 +34,44 @@ addEvent = (res) ->
   eventName = res.match[1].trim()
   eventDate = res.match[2].trim()
   eventLocation = res.match[3].trim()
-  currentEvents = res.robot.brain.get('events') || []
+  currentEvents = res.robot.brain.get('events') || {}
+
+  if eventName in currentEvents
+    res.send "An event with the name #{eventName} already exists."
+    return
 
   event = {
-    'name': eventName,
     'location': eventLocation,
-    'date': eventDate
+    'date': eventDate,
+    'atendees': []
   }
 
-  currentEvents.push(event)
+  currentEvents[eventName] = event
   res.robot.brain.set('events', currentEvents)
-  res.send "#{event.name} was added."
+  res.send "#{eventName} was added."
+
+joinEvent = (res) ->
+  eventName = res.match[1].trim()
+  user = res.message.user.name
+  events = res.robot.brain.get('events')
+
+  if !events[eventName]
+    res.send "An event with the name #{eventName} does not exist."
+    return
+
+  if user in events[eventName].atendees
+    res.send "You are already atending #{eventName}."
+    return
+
+  events[eventName].atendees.push(user)
+  # Hubot might save automaitcally on intervals of 5 (seconds? milliseconds?)
+  # res.robot.brain.emit 'save'
+
+  res.send "You are now atending #{eventName}."
+
 
 module.exports = (robot) ->
 
   robot.respond /list/i, listEvents
   robot.respond /organize ([\w ]+) for ([\w ]+) at ([\w ]+)$/i, addEvent
+  robot.respond /I'm in ([\w ]+)$/i, joinEvent
