@@ -11,7 +11,7 @@
 #Commands:
 #   SocialBot list - lists all upcoming social events.
 #   SocialBot who's in <event> - lists people who have RSVPed to <event>
-#   SocialBot organize <event> for <date> at <place> - Adds event to events list and starts an RSVP
+#   SocialBot organize <event-name> for <date> at <place> - Adds event to events list and starts an RSVP
 #   SocialBot I'm in for <event> - RSVPs you as coming to <event>
 #   SocialBot abandon <event> - Remove yourself from <event>
 #   SocialBot cancel <event> - removes <event> from upcoming events list
@@ -22,7 +22,8 @@ parseEvents = (results) ->
     return "There are no upcoming social events."
   parsedResults = ["Upcoming Social Events:"]
   for result in results
-    parsedResults.push result.name
+    eventString = "#{result.name} at #{result.location} on #{result.date}."
+    parsedResults.push eventString
   return parsedResults.join('\n')
 
 
@@ -30,9 +31,23 @@ listEvents = (res) ->
   results = res.robot.brain.get('events')
   res.send parseEvents(results)
 
+addEvent = (res) -> 
+  eventName = res.match[1].trim()
+  eventDate = res.match[2].trim()
+  eventLocation = res.match[3].trim()
+  currentEvents = res.robot.brain.get('events') || []
+
+  event = {
+    'name': eventName,
+    'location': eventLocation,
+    'date': eventDate
+  }
+
+  currentEvents.push(event)
+  res.robot.brain.set('events', currentEvents)
+  res.send "#{event.name} was added."
 
 module.exports = (robot) ->
 
-  robot.brain.set('events', [{'name': 'testEvent'}])
-
   robot.respond /list/i, listEvents
+  robot.respond /organize ([\w ]+) for ([\w ]+) at ([\w ]+)$/i, addEvent
