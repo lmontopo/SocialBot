@@ -69,9 +69,27 @@ joinEvent = (res) ->
 
   res.send "You are now atending #{eventName}."
 
+abandonEvent = (res) ->
+  eventName = res.match[1].trim()
+  user = res.message.user.name
+  events = res.robot.brain.get('events')
+
+  if !events[eventName]
+    res.send "An event with the name #{eventName} does not exist."
+    return
+
+  if user not in events[eventName].atendees
+    res.send "You were not planning to attend #{eventName}."
+    return
+
+  users = (u for u in events[eventName].atendees when u isnt user)
+  events[eventName].atendees = users
+
+  res.send "You are no longer atending #{eventName}."
 
 module.exports = (robot) ->
 
   robot.respond /list/i, listEvents
   robot.respond /organize ([\w ]+) for ([\w ]+) at ([\w ]+)$/i, addEvent
   robot.respond /I'm in ([\w ]+)$/i, joinEvent
+  robot.respond /abandon ([\w ]+)$/i, abandonEvent
