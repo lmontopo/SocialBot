@@ -17,7 +17,8 @@
 #   SocialBot cancel <event> - removes <event> from upcoming events list
 #
 
-chrono = require('chrono-node')
+chrono = require 'chrono-node'
+schedule = require 'node-schedule'
 
 NO_SUCH_EVENT = (eventName) -> "An event with the name #{eventName} does not exist."
 ALREADY_EXISTS = (eventName) -> "An event with the name #{eventName} already exists."
@@ -31,6 +32,7 @@ NO_LONGER_ATTENDING = (user, eventName) -> "@#{user} You are no longer attending
 CANCEL_FORBIDDEN = (user, creators, eventName) -> "@#{user} Only #{creators} can cancel #{eventName}."
 CANCELLED = (user, eventName) -> "@#{user} You have cancelled #{eventName}."
 BAD_TIME = (user, eventName) -> "@#{user} You have entered an invalid time for #{eventName}"
+EVENT_REMINDER = (users, eventName) -> "REMINDER: Event #{eventName} is tomorrow!\n#{users}"
 
 getEvent = (eventName, brain) ->
   events = getEvents(brain)
@@ -52,12 +54,25 @@ parseEvents = (results) ->
     parsedResults.push eventString
   return parsedResults.join('\n')
 
+eventReminder = (res, selectedEvent) ->
+  date = chrono.parseDate(selectedEvent.date + ' ' + selectedEvent.time) 
+  date.setDate(date.getDate() - 1)
+  month = date.getMonth()
+  day = date.getDate()
+  hour = date.getHours()
+
+  schedule.scheduleJob "0 #{hour} #{day} #{month} *", () -> res.send(EVENT_REMINDER(parseNotifyUsers(selectedEvent), selectedEvent.name))
+
 listEvents = (res) ->
   events = getEvents(res.robot.brain)
   res.send parseEvents(events)
 
 parseUsers = (event) ->
   return event.attendees.join(', ')
+
+parseNotifyUsers = (event) ->
+  users = ('@' + user for user in event.attendees)
+  return users.join(', ')
 
 parseCreators = (event) ->
   return event.creators.join(', ')
@@ -86,12 +101,15 @@ addEvent = (res) ->
     return
 
   newEvent = {
+    'name': eventName,
     'location': eventLocation,
     'date': eventDate.toDateString(),
     'time': eventDate.toLocaleTimeString(),
     'attendees': [user],
     'creators': [user]
   }
+
+  eventReminder(res, newEvent)
 
   currentEvents[eventName] = newEvent
   res.robot.brain.set('events', currentEvents)
