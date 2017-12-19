@@ -69,14 +69,14 @@ listUsers = (res) ->
     return
   res.send parseUsers(selectedEvent)
 
-addEvent = (res) -> 
+addEvent = (res) ->
   eventName = res.match[1].trim()
   eventDate = res.match[2].trim()
   eventLocation = res.match[3].trim()
   currentEvents = getEvents(res.robot.brain)
   user = res.message.user.name
 
-  if eventName in currentEvents
+  if eventName of currentEvents
     res.send ALREADY_EXISTS(eventName)
     return
 
@@ -140,7 +140,7 @@ cancelEvent = (res) ->
     res.send CANCEL_FORBIDDEN(user, creators, eventName)
     return
 
-  delete events[eventName] 
+  delete events[eventName]
   res.send CANCELLED(user, eventName)
 
 test = (res) ->
