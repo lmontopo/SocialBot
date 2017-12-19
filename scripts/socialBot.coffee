@@ -34,7 +34,7 @@ CANCELLED = (user, eventName) -> "@#{user} You have cancelled #{eventName}."
 BAD_TIME = (user, eventName) -> "@#{user} You have entered an invalid time for #{eventName}"
 EVENT_REMINDER = (users, eventName) -> "REMINDER: Event #{eventName} is tomorrow!\n#{users}"
 DEADLINE_PASSED = (user, eventName) -> "@#{user} the deadline to join #{eventName} has passed."
-RSVP_REMINDER = (eventName) -> "@all Deadline to RSVP for #{eventName} is tomorrow!"
+RSVP_REMINDER = (eventName, date) -> "@all Deadline to RSVP for #{eventName} is #{date}!"
 
 getEvent = (eventName, brain) ->
   events = getEvents(brain)
@@ -69,7 +69,7 @@ eventReminder = (res, selectedEvent) ->
   month = date.getMonth()
   day = date.getDate()
   hour = date.getHours()
-  
+
   schedule.scheduleJob "0 #{hour} #{day} #{month} *", () -> res.send(EVENT_REMINDER(parseNotifyUsers(selectedEvent), selectedEvent.name))
 
 setRsvpReminder = (res, selectedEvent) ->
@@ -78,9 +78,9 @@ setRsvpReminder = (res, selectedEvent) ->
   month = date.getMonth()
   day = date.getDate()
   hour = date.getHours()
-  
-  schedule.scheduleJob "43 * * * *", () -> res.send(RSVP_REMINDER(selectedEvent.name))
-  #schedule.scheduleJob "0 #{hour} #{day} #{month} *", () -> res.send(RSVP_REMINDER(selectedEvent.name))
+
+  # schedule.scheduleJob "3 * * * *", () -> res.send(RSVP_REMINDER(selectedEvent.name, getDateReadable(date)))
+  schedule.scheduleJob "0 #{hour} #{day} #{month} *", () -> res.send(RSVP_REMINDER(selectedEvent.name, getDateReadable(date)))
 
 listEvents = (res) ->
   events = getEvents(res.robot.brain)
@@ -196,6 +196,13 @@ cancelEvent = (res) ->
   delete events[eventName]
   res.send CANCELLED(user, eventName)
 
+forceRemind = (res) ->
+  eventName = res.match[1].trim()
+  selectedEvent = getEvent(eventName, res.robot.brain)
+  date = getDateReadable(selectedEvent.rsvpCloseDate)
+  res.send RSVP_REMINDER(eventName, date)
+  return
+
 test = (res) ->
   getEvents(res.robot.brain)
 
@@ -208,3 +215,4 @@ module.exports = (robot) ->
   robot.respond /who's in ([\w ]+)$/i, listUsers
   robot.respond /cancel ([\w ]+)$/i, cancelEvent
   robot.respond /test$/i, test
+  robot.respond /remind about ([\w ]+$)/i, forceRemind
