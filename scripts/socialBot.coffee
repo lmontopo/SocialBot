@@ -23,7 +23,7 @@ schedule = require 'node-schedule'
 NO_SUCH_EVENT = (eventName) -> "An event with the name #{eventName} does not exist."
 ALREADY_EXISTS = (eventName) -> "An event with the name #{eventName} already exists."
 NO_EVENTS = () -> "There are no upcoming social events."
-EVENT_DETAILS = (selectedEvent, details) -> "#{selectedEvent} at #{details.location} on #{details.date} at #{details.time}."
+EVENT_DETAILS = (selectedEvent, details) -> "#{selectedEvent} at #{details.location} on #{getDateReadable details.date}."
 ADDED_BY = (eventName, user) -> "#{eventName} was added by @#{user}."
 ALREADY_ATTENDING = (user, eventName) -> "@#{user} You are already atending #{eventName}."
 NOW_ATTENDING = (user, eventName) -> "@#{user} You are now atending #{eventName}."
@@ -33,6 +33,7 @@ CANCEL_FORBIDDEN = (user, creators, eventName) -> "@#{user} Only #{creators} can
 CANCELLED = (user, eventName) -> "@#{user} You have cancelled #{eventName}."
 BAD_TIME = (user, eventName) -> "@#{user} You have entered an invalid time for #{eventName}"
 EVENT_REMINDER = (users, eventName) -> "REMINDER: Event #{eventName} is tomorrow!\n#{users}"
+DEADLINE_PASSED = (user, eventName) -> "@#{user} the deadline to join #{eventName} has passed."
 
 getEvent = (eventName, brain) ->
   events = getEvents(brain)
@@ -45,6 +46,13 @@ getEvents = (brain) ->
 
   return brain.get('events')
 
+getDate = (dateString) ->
+  return new Date(dateString)
+
+getDateReadable = (dateString) ->
+  date = getDate(dateString)
+  return date.toDateString() + ' at ' + date.toLocaleTimeString()
+
 parseEvents = (results) ->
   if !results
     return NO_EVENTS()
@@ -55,12 +63,12 @@ parseEvents = (results) ->
   return parsedResults.join('\n')
 
 eventReminder = (res, selectedEvent) ->
-  date = chrono.parseDate(selectedEvent.date + ' ' + selectedEvent.time) 
+  date = getDate(selectedEvent.date)
   date.setDate(date.getDate() - 1)
   month = date.getMonth()
   day = date.getDate()
   hour = date.getHours()
-
+  
   schedule.scheduleJob "0 #{hour} #{day} #{month} *", () -> res.send(EVENT_REMINDER(parseNotifyUsers(selectedEvent), selectedEvent.name))
 
 listEvents = (res) ->
@@ -88,6 +96,8 @@ listUsers = (res) ->
 addEvent = (res) ->
   eventName = res.match[1].trim()
   eventDate = chrono.parseDate(res.match[2].trim())
+  rsvpCloseDate = new Date()
+  rsvpCloseDate.setDate(eventDate.getDate() - 7)
   eventLocation = res.match[3].trim()
   currentEvents = getEvents(res.robot.brain)
   user = res.message.user.name
@@ -103,10 +113,10 @@ addEvent = (res) ->
   newEvent = {
     'name': eventName,
     'location': eventLocation,
-    'date': eventDate.toDateString(),
-    'time': eventDate.toLocaleTimeString(),
+    'date': eventDate,
     'attendees': [user],
-    'creators': [user]
+    'creators': [user],
+    'rsvpCloseDate': rsvpCloseDate
   }
 
   eventReminder(res, newEvent)
@@ -114,11 +124,18 @@ addEvent = (res) ->
   currentEvents[eventName] = newEvent
   res.robot.brain.set('events', currentEvents)
   res.send ADDED_BY(eventName, user)
+  return
 
 joinEvent = (res) ->
   eventName = res.match[1].trim()
   user = res.message.user.name
   selectedEvent = getEvent(eventName, res.robot.brain)
+  currentDate = new Date()
+  rsvpCloseDate = getDate(selectedEvent.rsvpCloseDate)
+
+  if rsvpCloseDate < currentDate
+    res.send DEADLINE_PASSED(user, eventName)
+    return
 
   if !selectedEvent
     res.send NO_SUCH_EVENT(eventName)
