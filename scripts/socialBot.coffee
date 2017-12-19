@@ -17,75 +17,135 @@
 #   SocialBot cancel <event> - removes <event> from upcoming events list
 #
 
+NO_SUCH_EVENT = (eventName) -> "An event with the name #{eventName} does not exist."
+ALREADY_EXISTS = (eventName) -> "An event with the name #{eventName} already exists."
+NO_EVENTS = () -> "There are no upcoming social events."
+EVENT_DETAILS = (selectedEvent, details) -> "#{selectedEvent} at #{details.location} on #{details.date}."
+ADDED_BY = (eventName, user) -> "#{eventName} was added by @#{user}."
+ALREADY_ATTENDING = (user, eventName) -> "@#{user} You are already atending #{eventName}."
+NOW_ATTENDING = (user, eventName) -> "@#{user} You are now atending #{eventName}."
+NEVER_ATTENDING = (user, eventName) -> "@#{user} You were not planning to attend #{eventName}."
+NO_LONGER_ATTENDING = (user, eventName) -> "@#{user} You are no longer attending #{eventName}."
+CANCEL_FORBIDDEN = (user, creators, eventName) -> "@#{user} Only #{creators} can cancel #{eventName}."
+CANCELLED = (user, eventName) -> "@#{user} You have cancelled #{eventName}."
+
+
+getEvent = (eventName, brain) ->
+  events = getEvents(brain)
+  return events[eventName]
+
+getEvents = (brain) ->
+  events = brain.get('events')
+  if !events
+    brain.set('events', {})
+
+  return brain.get('events')
+
+
 parseEvents = (results) ->
   if !results
-    return "There are no upcoming social events."
+    return NO_EVENTS()
   parsedResults = ["Upcoming Social Events:"]
-  for event, details of results
-    eventString = "#{event} at #{details.location} on #{details.date}."
+  for selectedEvent, details of results
+    eventString = EVENT_DETAILS(selectedEvent, details)
     parsedResults.push eventString
   return parsedResults.join('\n')
 
 listEvents = (res) ->
-  results = res.robot.brain.get('events')
-  res.send parseEvents(results)
+  events = getEvents(res.robot.brain)
+  res.send parseEvents(events)
+
+parseUsers = (event) ->
+  return event.attendees.join(', ')
+
+parseCreators = (event) ->
+  return event.creators.join(', ')
+
+listUsers = (res) ->
+  eventName = res.match[1].trim()
+  selectedEvent = getEvent(eventName, res.robot.brain)
+  if !selectedEvent
+    res.send NO_SUCH_EVENT(eventName)
+    return
+  res.send parseUsers(selectedEvent)
 
 addEvent = (res) -> 
   eventName = res.match[1].trim()
   eventDate = res.match[2].trim()
   eventLocation = res.match[3].trim()
-  currentEvents = res.robot.brain.get('events') || {}
+  currentEvents = getEvents(res.robot.brain)
+  user = res.message.user.name
 
   if eventName in currentEvents
-    res.send "An event with the name #{eventName} already exists."
+    res.send ALREADY_EXISTS(eventName)
     return
 
-  event = {
+  newEvent = {
     'location': eventLocation,
     'date': eventDate,
-    'atendees': []
+    'attendees': [user],
+    'creators': [user]
   }
 
-  currentEvents[eventName] = event
+  currentEvents[eventName] = newEvent
   res.robot.brain.set('events', currentEvents)
-  res.send "#{eventName} was added."
+  res.send ADDED_BY(eventName, user)
 
 joinEvent = (res) ->
   eventName = res.match[1].trim()
   user = res.message.user.name
-  events = res.robot.brain.get('events')
+  selectedEvent = getEvent(eventName, res.robot.brain)
 
-  if !events[eventName]
-    res.send "An event with the name #{eventName} does not exist."
+  if !selectedEvent
+    res.send NO_SUCH_EVENT(eventName)
     return
 
-  if user in events[eventName].atendees
-    res.send "You are already atending #{eventName}."
+  if user in selectedEvent.attendees
+    res.send ALREADY_ATTENDING(user, eventName)
     return
 
-  events[eventName].atendees.push(user)
-  # Hubot might save automaitcally on intervals of 5 (seconds? milliseconds?)
-  # res.robot.brain.emit 'save'
-
-  res.send "You are now atending #{eventName}."
+  selectedEvent.attendees.push(user)
+  res.send NOW_ATTENDING(eventName)
 
 abandonEvent = (res) ->
   eventName = res.match[1].trim()
   user = res.message.user.name
-  events = res.robot.brain.get('events')
+  selectedEvent = getEvent(eventName, res.robot.brain)
 
-  if !events[eventName]
-    res.send "An event with the name #{eventName} does not exist."
+  if !selectedEvent
+    res.send NO_SUCH_EVENT(user, eventName)
     return
 
-  if user not in events[eventName].atendees
-    res.send "You were not planning to attend #{eventName}."
+  if user not in selectedEvent.attendees
+    res.send NEVER_ATTENDING(user, eventName)
     return
 
-  users = (u for u in events[eventName].atendees when u isnt user)
-  events[eventName].atendees = users
+  users = (u for u in selectedEvent.attendees when u isnt user)
+  selectedEvent.attendees = users
 
-  res.send "You are no longer atending #{eventName}."
+  res.send NO_LONGER_ATTENDING(user, eventName)
+
+cancelEvent = (res) ->
+  eventName = res.match[1].trim()
+  user = res.message.user.name
+  events = getEvents(res.robot.brain)
+  selectedEvent = getEvent(eventName, res.robot.brain)
+
+  if !selectedEvent
+    res.send NO_SUCH_EVENT(eventName)
+    return
+
+  if user not in selectedEvent.creators
+    creators = parseCreators(selectedEvent)
+    res.send CANCEL_FORBIDDEN(user, creators, eventName)
+    return
+
+  delete events[eventName] 
+  res.send CANCELLED(user, eventName)
+
+test = (res) ->
+  getEvents(res.robot.brain)
+
 
 module.exports = (robot) ->
 
@@ -93,3 +153,6 @@ module.exports = (robot) ->
   robot.respond /organize ([\w ]+) for ([\w ]+) at ([\w ]+)$/i, addEvent
   robot.respond /I'm in ([\w ]+)$/i, joinEvent
   robot.respond /abandon ([\w ]+)$/i, abandonEvent
+  robot.respond /who's in ([\w ]+)$/i, listUsers
+  robot.respond /cancel ([\w ]+)$/i, cancelEvent
+  robot.respond /test$/i, test
