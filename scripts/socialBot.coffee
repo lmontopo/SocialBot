@@ -34,6 +34,7 @@ CANCELLED = (user, eventName) -> "@#{user} You have cancelled #{eventName}."
 BAD_TIME = (user, eventName) -> "@#{user} You have entered an invalid time for #{eventName}"
 EVENT_REMINDER = (users, eventName) -> "REMINDER: Event #{eventName} is tomorrow!\n#{users}"
 DEADLINE_PASSED = (user, eventName) -> "@#{user} the deadline to join #{eventName} has passed."
+RSVP_REMINDER = (eventName) -> "@all Deadline to RSVP for #{eventName} is tomorrow!"
 
 getEvent = (eventName, brain) ->
   events = getEvents(brain)
@@ -70,6 +71,16 @@ eventReminder = (res, selectedEvent) ->
   hour = date.getHours()
   
   schedule.scheduleJob "0 #{hour} #{day} #{month} *", () -> res.send(EVENT_REMINDER(parseNotifyUsers(selectedEvent), selectedEvent.name))
+
+setRsvpReminder = (res, selectedEvent) ->
+  date = getDate(selectedEvent.rsvpCloseDate)
+  date.setDate(date.getDate() - 1)
+  month = date.getMonth()
+  day = date.getDate()
+  hour = date.getHours()
+  
+  schedule.scheduleJob "43 * * * *", () -> res.send(RSVP_REMINDER(selectedEvent.name))
+  #schedule.scheduleJob "0 #{hour} #{day} #{month} *", () -> res.send(RSVP_REMINDER(selectedEvent.name))
 
 listEvents = (res) ->
   events = getEvents(res.robot.brain)
@@ -120,6 +131,7 @@ addEvent = (res) ->
   }
 
   eventReminder(res, newEvent)
+  setRsvpReminder(res, newEvent)
 
   currentEvents[eventName] = newEvent
   res.robot.brain.set('events', currentEvents)
