@@ -17,10 +17,12 @@
 #   SocialBot cancel <event> - removes <event> from upcoming events list
 #
 
+chrono = require('chrono-node')
+
 NO_SUCH_EVENT = (eventName) -> "An event with the name #{eventName} does not exist."
 ALREADY_EXISTS = (eventName) -> "An event with the name #{eventName} already exists."
 NO_EVENTS = () -> "There are no upcoming social events."
-EVENT_DETAILS = (selectedEvent, details) -> "#{selectedEvent} at #{details.location} on #{details.date}."
+EVENT_DETAILS = (selectedEvent, details) -> "#{selectedEvent} at #{details.location} on #{details.date} at #{details.time}."
 ADDED_BY = (eventName, user) -> "#{eventName} was added by @#{user}."
 ALREADY_ATTENDING = (user, eventName) -> "@#{user} You are already atending #{eventName}."
 NOW_ATTENDING = (user, eventName) -> "@#{user} You are now atending #{eventName}."
@@ -28,7 +30,7 @@ NEVER_ATTENDING = (user, eventName) -> "@#{user} You were not planning to attend
 NO_LONGER_ATTENDING = (user, eventName) -> "@#{user} You are no longer attending #{eventName}."
 CANCEL_FORBIDDEN = (user, creators, eventName) -> "@#{user} Only #{creators} can cancel #{eventName}."
 CANCELLED = (user, eventName) -> "@#{user} You have cancelled #{eventName}."
-
+BAD_TIME = (user, eventName) -> "@#{user} You have entered an invalid time for #{eventName}"
 
 getEvent = (eventName, brain) ->
   events = getEvents(brain)
@@ -40,7 +42,6 @@ getEvents = (brain) ->
     brain.set('events', {})
 
   return brain.get('events')
-
 
 parseEvents = (results) ->
   if !results
@@ -71,7 +72,7 @@ listUsers = (res) ->
 
 addEvent = (res) ->
   eventName = res.match[1].trim()
-  eventDate = res.match[2].trim()
+  eventDate = chrono.parseDate(res.match[2].trim())
   eventLocation = res.match[3].trim()
   currentEvents = getEvents(res.robot.brain)
   user = res.message.user.name
@@ -80,9 +81,14 @@ addEvent = (res) ->
     res.send ALREADY_EXISTS(eventName)
     return
 
+  if !eventDate
+    res.send BAD_TIME(user, eventName)
+    return
+
   newEvent = {
     'location': eventLocation,
-    'date': eventDate,
+    'date': eventDate.toDateString(),
+    'time': eventDate.toLocaleTimeString(),
     'attendees': [user],
     'creators': [user]
   }
@@ -146,11 +152,10 @@ cancelEvent = (res) ->
 test = (res) ->
   getEvents(res.robot.brain)
 
-
 module.exports = (robot) ->
 
   robot.respond /list/i, listEvents
-  robot.respond /organize ([\w ]+) for ([\w ]+) at ([\w ]+)$/i, addEvent
+  robot.respond /organize ([\w ]+) for ([\w: ]+) at ([\w ]+)$/i, addEvent
   robot.respond /I'm in ([\w ]+)$/i, joinEvent
   robot.respond /abandon ([\w ]+)$/i, abandonEvent
   robot.respond /who's in ([\w ]+)$/i, listUsers
