@@ -16,6 +16,8 @@
 #   SocialBot abandon <event> - Remove yourself from <event>
 #   SocialBot cancel <event> - removes <event> from upcoming events list
 #   SocialBot (change|set) RSVP deadline for <event> to <date-time> - Set an RSVP deadline for <event> to be <date-time>. The default deadline is a week before <event> starts.
+#   SocialBot add description to <event-name>: <description> - Add a description to an event
+#   SocialBot get details <event-name> - See event name, date, time and description
 
 chrono = require 'chrono-node'
 schedule = require 'node-schedule'
@@ -24,6 +26,7 @@ NO_SUCH_EVENT = (eventName) -> "An event with the name #{eventName} does not exi
 ALREADY_EXISTS = (eventName) -> "An event with the name #{eventName} already exists."
 NO_EVENTS = () -> "There are no upcoming social events."
 EVENT_DETAILS = (selectedEvent, details) -> "#{selectedEvent} at #{details.location} on #{getDateReadable details.date}."
+EVENT_DESCRIPTION = (user, selectedEvent, details) ->"@#{user} #{EVENT_DETAILS(selectedEvent, details)}\n\t#{details.description}"
 ADDED_BY = (eventName, user) -> "#{eventName} was added by @#{user}."
 ALREADY_ATTENDING = (user, eventName) -> "@#{user} You are already atending #{eventName}."
 NOW_ATTENDING = (user, eventName) -> "@#{user} You are now atending #{eventName}."
@@ -147,6 +150,7 @@ addEvent = (res) ->
 
   newEvent = {
     'name': eventName,
+    'description': '',
     'location': eventLocation,
     'date': eventDate,
     'attendees': [user],
@@ -293,6 +297,30 @@ notifyAllAttendees = (res) ->
 
   res.send NOTIFY_ATTENDEES(user, parseNotifyUsers(selectedEvent), eventName, message)  
   
+addDescription = (res) ->
+  eventName = res.match[1].trim()
+  description = res.match[2].trim()
+  user = getUsername(res)
+  selectedEvent = getEvent(eventName, res.robot.brain)
+
+  if !selectedEvent
+    res.send NO_SUCH_EVENT(eventName)
+    return
+
+  selectedEvent.description = description
+  res.send EVENT_DESCRIPTION(user, eventName, selectedEvent)
+
+getEventDetails = (res) ->
+  eventName = res.match[1].trim()
+  user = getUsername(res)
+  selectedEvent = getEvent(eventName, res.robot.brain)
+
+  if !selectedEvent
+    res.send NO_SUCH_EVENT(eventName)
+    return
+
+  res.send EVENT_DESCRIPTION(user, eventName, selectedEvent)
+
 test = (res) ->
   getEvents(res.roboto.brain)
 
@@ -310,3 +338,5 @@ module.exports = (robot) ->
   robot.respond /remind about ([\w ]+$)/i, forceRemind
   robot.respond /tell ([\w ]+) attendees \"(.+)\"$/i, notifyAllAttendees
   robot.respond /add creator ([\w ]+) to ([\w ]+)/i, addCreator
+  robot.respond /add description to ([\w ]+): (.+)$/i, addDescription
+  robot.respond /get details ([\w ]+)$/i, getEventDetails
