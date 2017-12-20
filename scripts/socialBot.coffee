@@ -44,6 +44,7 @@ CHANGE_DEADLINE_FORBIDDEN = (user, creators, eventName) -> "@#{user} Only #{crea
 NOTIFY_ATTENDEES = (user, users, eventName, message) -> "Message from #{user} regarding #{eventName}:\n#{message}\n#{users}"
 ONLY_ATTENDEES_CAN_NOTIFY = () -> "Only attendees can send a notification about this event."
 CANNOT_ABANDON = (user, eventName) -> "@#{user} You cannot abandon #{eventName} before selecting a replacement creator."
+ADD_DESCRIPTION_FORBIDDEN = (user, creators, eventName) -> "@#{user} Only #{creators} can edit the description of #{eventName}."
 
 
 #
@@ -305,6 +306,11 @@ addDescription = (res) ->
 
   if !selectedEvent
     res.send NO_SUCH_EVENT(eventName)
+    return
+
+  if user not in selectedEvent.creators
+    creators = parseCreators(selectedEvent)
+    res.send ADD_DESCRIPTION_FORBIDDEN(user, creators, eventName)
     return
 
   selectedEvent.description = description
