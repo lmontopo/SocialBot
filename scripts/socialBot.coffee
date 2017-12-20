@@ -31,10 +31,11 @@ NEVER_ATTENDING = (user, eventName) -> "@#{user} You were not planning to attend
 NO_LONGER_ATTENDING = (user, eventName) -> "@#{user} You are no longer attending #{eventName}."
 CANCEL_FORBIDDEN = (user, creators, eventName) -> "@#{user} Only #{creators} can cancel #{eventName}."
 CANCELLED = (user, eventName) -> "@#{user} You have cancelled #{eventName}."
-BAD_TIME = (user, eventName) -> "@#{user} You have entered an invalid time for #{eventName}"
+BAD_TIME = (user, eventName) -> "@#{user} You have entered an invalid time for #{eventName}."
 EVENT_REMINDER = (users, eventName) -> "REMINDER: Event #{eventName} is tomorrow!\n#{users}"
 DEADLINE_PASSED = (user, eventName) -> "@#{user} the deadline to join #{eventName} has passed."
 RSVP_REMINDER = (eventName, date) -> "@all Deadline to RSVP for #{eventName} is #{date}!"
+CREATOR_ADDED = (user, eventName) -> "@#{user} is now a creator of #{eventName}."
 
 getEvent = (eventName, brain) ->
   events = getEvents(brain)
@@ -160,6 +161,28 @@ joinEvent = (res) ->
   selectedEvent.attendees.push(user)
   res.send NOW_ATTENDING(eventName)
 
+addCreator = (res) ->
+  newCreator = res.match[1].trim()
+  eventName = res.match[2].trim()
+  user = res.message.user.name
+  events = getEvents(res.robot.brain)
+  selectedEvent = getEvent(eventName, res.robot.brain)
+
+  if !selectedEvent
+    res.send NO_SUCH_EVENT(eventName)
+    return
+
+  if user not in selectedEvent.creators
+    creators = parseCreators(selectedEvent)
+    res.send CANCEL_FORBIDDEN(user, creators, eventName)
+    return
+
+  if newCreator not in selectedEvent.attendees
+    selectedEvent.attendees.push(newCreator)
+
+  selectedEvent.creators.push(newCreator)
+  res.send CREATOR_ADDED(newCreator, eventName)
+
 abandonEvent = (res) ->
   eventName = res.match[1].trim()
   user = res.message.user.name
@@ -216,3 +239,4 @@ module.exports = (robot) ->
   robot.respond /cancel ([\w ]+)$/i, cancelEvent
   robot.respond /test$/i, test
   robot.respond /remind about ([\w ]+$)/i, forceRemind
+  robot.respond /add creator ([\w ]+) to ([\w ]+)/i, addCreator
