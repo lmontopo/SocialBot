@@ -18,6 +18,7 @@
 #   SocialBot (change|set) RSVP deadline for <event> to <date-time> - Set an RSVP deadline for <event> to be <date-time>. The default deadline is a week before <event> starts.
 #   SocialBot add description to <event-name>: <description> - Add a description to an event
 #   SocialBot get details <event-name> - See event name, date, time and description
+#   SocialBot change <event-name> time to <date-time> - Update the <date-time> of <event-name>
 
 chrono = require 'chrono-node'
 schedule = require 'node-schedule'
@@ -28,23 +29,20 @@ NO_EVENTS = () -> "There are no upcoming social events."
 EVENT_DETAILS = (selectedEvent, details) -> "#{selectedEvent} at #{details.location} on #{getDateReadable details.date}."
 EVENT_DESCRIPTION = (user, selectedEvent, details) ->"@#{user} #{EVENT_DETAILS(selectedEvent, details)}\n\t#{details.description}"
 ADDED_BY = (eventName, user) -> "#{eventName} was added by @#{user}."
-ALREADY_ATTENDING = (user, eventName) -> "@#{user} You are already atending #{eventName}."
-NOW_ATTENDING = (user, eventName) -> "@#{user} You are now atending #{eventName}."
+ALREADY_ATTENDING = (user, eventName) -> "@#{user} You are already attending #{eventName}."
+NOW_ATTENDING = (user, eventName) -> "@#{user} You are now attending #{eventName}."
 NEVER_ATTENDING = (user, eventName) -> "@#{user} You were not planning to attend #{eventName}."
 NO_LONGER_ATTENDING = (user, eventName) -> "@#{user} You are no longer attending #{eventName}."
-CANCEL_FORBIDDEN = (user, creators, eventName) -> "@#{user} Only #{creators} can cancel #{eventName}."
-CANCELLED = (creator, users, eventName) -> "Event #{eventName} has been cancelled by #{creator}.\n#{users}"
+CANCELLED = (creator, users, eventName) -> "Event #{eventName} has been canceled by #{creator}.\n#{users}"
 BAD_TIME = (user, eventName) -> "@#{user} You have entered an invalid time for #{eventName}."
 EVENT_REMINDER = (users, eventName) -> "REMINDER: Event #{eventName} is tomorrow!\n#{users}"
 DEADLINE_PASSED = (user, eventName) -> "@#{user} the deadline to join #{eventName} has passed."
 RSVP_REMINDER = (eventName, date) -> "@all Deadline to RSVP for #{eventName} is #{date}!"
 CREATOR_ADDED = (user, eventName) -> "@#{user} is now a creator of #{eventName}."
 NEW_DEADLINE = (eventName, deadline) -> "The deadline to RSVP for #{eventName} is now #{getDateReadable deadline}."
-CHANGE_DEADLINE_FORBIDDEN = (user, creators, eventName) -> "@#{user} Only #{creators} can change the deadline to RSVP for #{eventName}."
 NOTIFY_ATTENDEES = (user, users, eventName, message) -> "Message from #{user} regarding #{eventName}:\n#{message}\n#{users}"
 ONLY_ATTENDEES_CAN_NOTIFY = () -> "Only attendees can send a notification about this event."
 CANNOT_ABANDON = (user, eventName) -> "@#{user} You cannot abandon #{eventName} before selecting a replacement creator."
-ADD_DESCRIPTION_FORBIDDEN = (user, creators, eventName) -> "@#{user} Only #{creators} can edit the description of #{eventName}."
 POLL_CREATED = (eventName, poll) -> "@all A poll for #{eventName} has started. Tag socialbot with one of the following commands to vote:\n#{parseOptions(poll)}"
 POLL_CLOSED = (eventName, winner) -> "Poll for #{eventName} has closed. The winner is #{winner}!"
 NO_SUCH_POLL = (user, eventName) -> "@#{user} No poll exists for #{eventName}"
@@ -52,7 +50,9 @@ NO_SUCH_OPTION = (user, option, eventName) -> "@#{user} No option '#{option}' in
 YOU_ALREADY_VOTED = (user, eventName) -> "@#{user} You've already voted in the poll for #{eventName}"
 VOTE_SUCCESSFUL = (user, option, eventName) -> "@#{user} You've voted for #{option} in the poll for #{eventName}"
 NO_ONE_VOTED = (eventName, creators) -> "#{creators} No one voted in the poll for #{eventName}"
-
+TIME_CHANGE_DURING_POLL_FORBIDDEN = (user, eventName) -> "@#{user} Wait for poll to end before changing the time for #{eventName}."
+NOT_CREATOR = (user, creators, eventName) -> "@#{user} Only #{creators} can modify #{eventName}."
+CREATOR_BREAK_TIE = (eventName, creators, winners) -> "#{creators} The poll for #{eventName} resulted in a tie. Tag socialbot with one of the winners:\n#{winners}"
 
 #
 # Helper Methods
@@ -124,7 +124,7 @@ createPoll = (res, eventName, eventDateOptions) ->
   }
 
   for dateOption in eventDateOptions
-    newPoll.options[dateOption] = 0
+    newPoll.options[dateOption.trim()] = 0
 
   polls[eventName] = newPoll
   setPollDeadline(res, newPoll)
@@ -172,7 +172,11 @@ parseNotifyCreators = (event) ->
 parseOptions = (poll) ->
   options = ('vote ' + option + ' for ' + poll.eventName for option, val of poll.options)
   return options.join('\n')
- 
+
+parseWinningDates = (eventName, winners) ->
+  options = ('change ' + eventName + ' time to ' + getDateReadable(winner) for winner in winners)
+  return options.join('\n')
+
 
 #
 # Job Scheduling
@@ -206,33 +210,42 @@ setPollDeadline = (res, poll) ->
   cancelScheduledJob(jobName)
   schedule.scheduleJob jobName, date, () -> closePoll(res, poll)
 
-# TO-DO deal with ties
 closePoll = (res, poll) ->
   selectedEvent = getEvent(poll.eventName, res.robot.brain)
+  eventName = selectedEvent.name
+  creators = parseNotifyCreators(selectedEvent)
 
   if !poll.voted.length
-    res.send NO_ONE_VOTED(selectedEvent.name, parseNotifyCreators(selectedEvent))
+    res.send NO_ONE_VOTED(eventName, creators)
 
   else
-    winner = decideWinner(poll)
-    winner = chrono.parseDate(winner)
+    winners = decideWinner(poll)
+    winners = (chrono.parseDate(winner) for winner in winners)
 
-    selectedEvent.date = winner
+    if winners.length == 1
+      selectedEvent.date = winner
+      res.send POLL_CLOSED(eventName, getDateReadable(winner))
+      eventReminder(res, eventName)
+      setRsvpReminder(res, eventName)
 
-    res.send POLL_CLOSED(selectedEvent.name, getDateReadable(winner))
+    else
+      res.send CREATOR_BREAK_TIE(eventName, creators, parseWinningDates(eventName, winners))
 
-  delete getPolls(res.robot.brain)[poll.eventName]
+  delete getPolls(res.robot.brain)[eventName]
 
 decideWinner = (poll) ->
-  winner = null
+  winners = []
   winningValue = 0
 
   for option, val of poll.options
-    if val > winningValue
+    if val == winningValue
+      winners.push(option)
+    else if val > winningValue
       winningValue = val
-      winner = option
+      winners = [option]
 
-  return winner
+  return winners
+
 
 #
 # User Command Handlers
@@ -309,7 +322,7 @@ addCreator = (res) ->
 
   if user not in selectedEvent.creators
     creators = parseCreators(selectedEvent)
-    res.send CANCEL_FORBIDDEN(user, creators, eventName)
+    res.send NOT_CREATOR(user, creators, eventName)
     return
 
   if newCreator not in selectedEvent.attendees
@@ -357,7 +370,7 @@ cancelEvent = (res) ->
 
   if user not in selectedEvent.creators
     creators = parseCreators(selectedEvent)
-    res.send CANCEL_FORBIDDEN(user, creators, eventName)
+    res.send NOT_CREATOR(user, creators, eventName)
     return
 
   delete events[eventName]
@@ -378,7 +391,7 @@ editRSVP = (res) ->
 
   if user not in selectedEvent.creators
     creators = parseCreators(selectedEvent)
-    res.send CHANGE_DEADLINE_FORBIDDEN(user, creators, eventName)
+    res.send NOT_CREATOR(user, creators, eventName)
     return
 
   if !newDeadline
@@ -417,7 +430,7 @@ addDescription = (res) ->
 
   if user not in selectedEvent.creators
     creators = parseCreators(selectedEvent)
-    res.send ADD_DESCRIPTION_FORBIDDEN(user, creators, eventName)
+    res.send NOT_CREATOR(user, creators, eventName)
     return
 
   selectedEvent.description = description
@@ -431,6 +444,36 @@ getEventDetails = (res) ->
   if !selectedEvent
     res.send NO_SUCH_EVENT(eventName)
     return
+
+  res.send EVENT_DESCRIPTION(user, eventName, selectedEvent)
+
+editEventTime = (res) ->
+  eventName = res.match[1].trim()
+  eventDate = chrono.parseDate(res.match[2].trim())
+  selectedEvent = getEvent(eventName, res.robot.brain)
+  poll = getPoll(eventName, res.robot.brain)
+  user = getUsername(res)
+
+  if !selectedEvent
+    res.send NO_SUCH_EVENT(eventName)
+    return
+
+  if !eventDate
+    res.send BAD_TIME(user, eventName)
+    return
+
+  if user not in selectedEvent.creators
+    creators = parseCreators(selectedEvent)
+    res.send NOT_CREATOR(user, creators, eventName)
+    return
+
+  if poll
+    res.send TIME_CHANGE_DURING_POLL_FORBIDDEN(user, eventName)
+    return
+
+  selectedEvent.date = eventDate
+  eventReminder(res, eventName)
+  setRsvpReminder(res, eventName)
 
   res.send EVENT_DESCRIPTION(user, eventName, selectedEvent)
 
@@ -485,3 +528,4 @@ module.exports = (robot) ->
   robot.respond /add creator ([\w ]+) to ([\w ]+)/i, addCreator
   robot.respond /add description to ([\w ]+): (.+)$/i, addDescription
   robot.respond /get details ([\w ]+)$/i, getEventDetails
+  robot.respond /change ([\w ]+) time to ([\w: ]+)$/i, editEventTime
