@@ -39,6 +39,10 @@ CREATOR_ADDED = (user, eventName) -> "@#{user} is now a creator of #{eventName}.
 NEW_DEADLINE = (eventName, deadline) -> "The deadline to RSVP for #{eventName} is now #{getDateReadable deadline}."
 CHANGE_DEADLINE_FORBIDDEN = (user, creators, eventName) -> "@#{user} Only #{creators} can change the deadline to RSVP for #{eventName}."
 
+
+#
+# Helper Methods
+#
 getEvent = (eventName, brain) ->
   events = getEvents(brain)
   return events[eventName]
@@ -69,6 +73,24 @@ parseEvents = (results) ->
     parsedResults.push eventString
   return parsedResults.join('\n')
 
+listEvents = (res) ->
+  events = getEvents(res.robot.brain)
+  res.send parseEvents(events)
+
+parseUsers = (event) ->
+  return event.attendees.join(', ')
+
+parseNotifyUsers = (event) ->
+  users = ('@' + user for user in event.attendees)
+  return users.join(', ')
+
+parseCreators = (event) ->
+  return event.creators.join(', ')
+
+
+#
+# Job Scheduling
+#
 cancelScheduledJob = (jobName) ->
   job = schedule.scheduledJobs[jobName]
   if job
@@ -90,20 +112,10 @@ setRsvpReminder = (res, selectedEvent) ->
   cancelScheduledJob(jobName)
   schedule.scheduleJob jobName, date, () -> res.send(RSVP_REMINDER(selectedEvent.name, getDateReadable(date)))
 
-listEvents = (res) ->
-  events = getEvents(res.robot.brain)
-  res.send parseEvents(events)
 
-parseUsers = (event) ->
-  return event.attendees.join(', ')
-
-parseNotifyUsers = (event) ->
-  users = ('@' + user for user in event.attendees)
-  return users.join(', ')
-
-parseCreators = (event) ->
-  return event.creators.join(', ')
-
+#
+# User Command Handlers
+#
 listUsers = (res) ->
   eventName = res.match[1].trim()
   selectedEvent = getEvent(eventName, res.robot.brain)
@@ -171,7 +183,7 @@ joinEvent = (res) ->
 addCreator = (res) ->
   newCreator = res.match[1].trim()
   eventName = res.match[2].trim()
-  user = res.message.user.name
+  user = getUsername(res)
   events = getEvents(res.robot.brain)
   selectedEvent = getEvent(eventName, res.robot.brain)
 
@@ -254,6 +266,7 @@ editRSVP = (res) ->
 
 test = (res) ->
   getEvents(res.robot.brain)
+
 
 module.exports = (robot) ->
 
