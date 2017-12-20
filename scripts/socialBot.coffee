@@ -30,16 +30,22 @@ NOW_ATTENDING = (user, eventName) -> "@#{user} You are now atending #{eventName}
 NEVER_ATTENDING = (user, eventName) -> "@#{user} You were not planning to attend #{eventName}."
 NO_LONGER_ATTENDING = (user, eventName) -> "@#{user} You are no longer attending #{eventName}."
 CANCEL_FORBIDDEN = (user, creators, eventName) -> "@#{user} Only #{creators} can cancel #{eventName}."
-CANCELLED = (user, eventName) -> "@#{user} You have cancelled #{eventName}."
-BAD_TIME = (user, eventName) -> "@#{user} You have entered an invalid time for #{eventName}"
+CANCELLED = (creator, users, eventName) -> "Event #{eventName} has been cancelled by #{creator}.\n#{users}"
+BAD_TIME = (user, eventName) -> "@#{user} You have entered an invalid time for #{eventName}."
 EVENT_REMINDER = (users, eventName) -> "REMINDER: Event #{eventName} is tomorrow!\n#{users}"
 DEADLINE_PASSED = (user, eventName) -> "@#{user} the deadline to join #{eventName} has passed."
 RSVP_REMINDER = (eventName, date) -> "@all Deadline to RSVP for #{eventName} is #{date}!"
+CREATOR_ADDED = (user, eventName) -> "@#{user} is now a creator of #{eventName}."
 NEW_DEADLINE = (eventName, deadline) -> "The deadline to RSVP for #{eventName} is now #{getDateReadable deadline}."
 CHANGE_DEADLINE_FORBIDDEN = (user, creators, eventName) -> "@#{user} Only #{creators} can change the deadline to RSVP for #{eventName}."
 NOTIFY_ATTENDEES = (user, users, eventName, message) -> "Message from #{user} regarding #{eventName}:\n#{message}\n#{users}"
 ONLY_ATTENDEES_CAN_NOTIFY = () -> "Only attendees can send a notification about this event."
+CANNOT_ABANDON = (user, eventName) -> "@#{user} You cannot abandon #{eventName} before selecting a replacement creator."
 
+
+#
+# Helper Methods
+#
 getEvent = (eventName, brain) ->
   events = getEvents(brain)
   return events[eventName]
@@ -58,6 +64,9 @@ getDateReadable = (dateString) ->
   date = getDate(dateString)
   return date.toDateString() + ' at ' + date.toLocaleTimeString()
 
+getUsername = (res) ->
+  return res.message.user.name
+
 parseEvents = (results) ->
   if !results
     return NO_EVENTS()
@@ -67,6 +76,24 @@ parseEvents = (results) ->
     parsedResults.push eventString
   return parsedResults.join('\n')
 
+listEvents = (res) ->
+  events = getEvents(res.robot.brain)
+  res.send parseEvents(events)
+
+parseUsers = (event) ->
+  return event.attendees.join(', ')
+
+parseNotifyUsers = (event) ->
+  users = ('@' + user for user in event.attendees)
+  return users.join(', ')
+
+parseCreators = (event) ->
+  return event.creators.join(', ')
+
+
+#
+# Job Scheduling
+#
 cancelScheduledJob = (jobName) ->
   job = schedule.scheduledJobs[jobName]
   if job
@@ -85,40 +112,14 @@ setRsvpReminder = (res, selectedEvent) ->
   date.setDate(date.getDate() - 1)
   jobName = "#{selectedEvent.name}_RSVP"
 
-  cancelScheduledJob(jobName)  
+  cancelScheduledJob(jobName)
   schedule.scheduleJob jobName, date, () -> res.send(RSVP_REMINDER(selectedEvent.name, getDateReadable(date)))
 
-listEvents = (res) ->
-  events = getEvents(res.robot.brain)
-  res.send parseEvents(events)
-
-parseUsers = (event) ->
-  return event.attendees.join(', ')
-
-parseNotifyUsers = (event) ->
-  users = ('@' + user for user in event.attendees)
-  return users.join(', ')
-
-parseCreators = (event) ->
-  return event.creators.join(', ')
-
-notifyAllAttendees = (res) ->
-  eventName = res.match[1].trim()
-  message = res.match[2].trim()
-  user = res.message.user.name
-  selectedEvent = getEvent(eventName, res.robot.brain)
-
-  if !selectedEvent
-    res.send NO_SUCH_EVENT(eventName)
-    return
-
-  if user not in selectedEvent.attendees
-    res.send ONLY_ATTENDEES_CAN_NOTIFY()
-    return
-
-  res.send NOTIFY_ATTENDEES(user, parseNotifyUsers(selectedEvent), eventName, message)
 
 
+#
+# User Command Handlers
+#
 listUsers = (res) ->
   eventName = res.match[1].trim()
   selectedEvent = getEvent(eventName, res.robot.brain)
@@ -134,7 +135,7 @@ addEvent = (res) ->
   rsvpCloseDate.setDate(eventDate.getDate() - 7)
   eventLocation = res.match[3].trim()
   currentEvents = getEvents(res.robot.brain)
-  user = res.message.user.name
+  user = getUsername(res)
 
   if eventName of currentEvents
     res.send ALREADY_EXISTS(eventName)
@@ -163,7 +164,7 @@ addEvent = (res) ->
 
 joinEvent = (res) ->
   eventName = res.match[1].trim()
-  user = res.message.user.name
+  user = getUsername(res)
   selectedEvent = getEvent(eventName, res.robot.brain)
   currentDate = new Date()
   rsvpCloseDate = getDate(selectedEvent.rsvpCloseDate)
@@ -183,9 +184,31 @@ joinEvent = (res) ->
   selectedEvent.attendees.push(user)
   res.send NOW_ATTENDING(eventName)
 
+addCreator = (res) ->
+  newCreator = res.match[1].trim()
+  eventName = res.match[2].trim()
+  user = getUsername(res)
+  events = getEvents(res.robot.brain)
+  selectedEvent = getEvent(eventName, res.robot.brain)
+
+  if !selectedEvent
+    res.send NO_SUCH_EVENT(eventName)
+    return
+
+  if user not in selectedEvent.creators
+    creators = parseCreators(selectedEvent)
+    res.send CANCEL_FORBIDDEN(user, creators, eventName)
+    return
+
+  if newCreator not in selectedEvent.attendees
+    selectedEvent.attendees.push(newCreator)
+
+  selectedEvent.creators.push(newCreator)
+  res.send CREATOR_ADDED(newCreator, eventName)
+
 abandonEvent = (res) ->
   eventName = res.match[1].trim()
-  user = res.message.user.name
+  user = getUsername(res)
   selectedEvent = getEvent(eventName, res.robot.brain)
 
   if !selectedEvent
@@ -196,6 +219,15 @@ abandonEvent = (res) ->
     res.send NEVER_ATTENDING(user, eventName)
     return
 
+  if user in selectedEvent.creators
+
+    if selectedEvent.creators.length == 1
+      res.send CANNOT_ABANDON(user, eventName)
+      return
+
+    creators = (c for c in selectedEvent.creators when c isnt user)
+    selectedEvent.creators = creators
+
   users = (u for u in selectedEvent.attendees when u isnt user)
   selectedEvent.attendees = users
 
@@ -203,7 +235,7 @@ abandonEvent = (res) ->
 
 cancelEvent = (res) ->
   eventName = res.match[1].trim()
-  user = res.message.user.name
+  user = getUsername(res)
   events = getEvents(res.robot.brain)
   selectedEvent = getEvent(eventName, res.robot.brain)
 
@@ -217,7 +249,7 @@ cancelEvent = (res) ->
     return
 
   delete events[eventName]
-  res.send CANCELLED(user, eventName)
+  res.send CANCELLED(user, parseNotifyUsers(selectedEvent), eventName)
 
 forceRemind = (res) ->
   eventName = res.match[1].trim()
@@ -228,7 +260,7 @@ forceRemind = (res) ->
 
 editRSVP = (res) ->
   eventName = res.match[2].trim()
-  user = res.message.user.name
+  user = getUsername(res)
   newDeadline = chrono.parseDate(res.match[3].trim())
   selectedEvent = getEvent(eventName, res.robot.brain)
 
@@ -245,8 +277,25 @@ editRSVP = (res) ->
   setRsvpReminder(res, selectedEvent)
   res.send NEW_DEADLINE(eventName, newDeadline)
 
+notifyAllAttendees = (res) ->
+  eventName = res.match[1].trim()
+  message = res.match[2].trim()
+  user = res.message.user.name
+  selectedEvent = getEvent(eventName, res.robot.brain)
+
+  if !selectedEvent
+    res.send NO_SUCH_EVENT(eventName)
+    return
+
+  if user not in selectedEvent.attendees
+    res.send ONLY_ATTENDEES_CAN_NOTIFY()
+    return
+
+  res.send NOTIFY_ATTENDEES(user, parseNotifyUsers(selectedEvent), eventName, message)  
+  
 test = (res) ->
   getEvents(res.roboto.brain)
+
 
 module.exports = (robot) ->
 
@@ -260,3 +309,4 @@ module.exports = (robot) ->
   robot.respond /test$/i, test
   robot.respond /remind about ([\w ]+$)/i, forceRemind
   robot.respond /tell ([\w ]+) attendees \"(.+)\"$/i, notifyAllAttendees
+  robot.respond /add creator ([\w ]+) to ([\w ]+)/i, addCreator
