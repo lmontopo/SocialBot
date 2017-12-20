@@ -54,12 +54,69 @@ getEvent = (eventName, brain) ->
   events = getEvents(brain)
   return events[eventName]
 
+getPolls = (brain) ->
+  polls = brain.get('polls')
+  if !polls
+    brain.set('polls', {})
+
+  return brain.get('polls')
+
 getEvents = (brain) ->
   events = brain.get('events')
   if !events
     brain.set('events', {})
 
   return brain.get('events')
+
+createEvent = (res, eventName, eventLocation, eventDate = undefined) ->
+  currentEvents = getEvents(res.robot.brain)
+  user = getUsername(res)
+
+  if eventName of currentEvents
+    res.send ALREADY_EXISTS(eventName)
+    return false
+
+  rsvpCloseDate = undefined
+
+  if eventDate
+    rsvpCloseDate = new Date()
+    rsvpCloseDate.setDate(eventDate.getDate() - 7)
+
+  newEvent = {
+    'name': eventName,
+    'description': '',
+    'location': eventLocation,
+    'date': eventDate,
+    'attendees': [user],
+    'creators': [user],
+    'rsvpCloseDate': rsvpCloseDate
+  }
+
+  currentEvents[eventName] = newEvent
+
+  if eventDate
+    eventReminder(res, newEvent)
+    setRsvpReminder(res, newEvent)
+
+  return true
+
+createPoll = (res, eventName, eventDateOptions) ->
+  polls = getPolls(res.robot.brain)
+
+  if eventName of polls
+    return false
+
+  newPoll = {
+    options: {}
+  }
+
+  for dateOption in eventDateOptions
+    newPoll.options[dateOption] = 0
+
+  polls[eventName] = newPoll
+
+  return true
+
 
 getDate = (dateString) ->
   return new Date(dateString)
@@ -135,37 +192,33 @@ listUsers = (res) ->
 addEvent = (res) ->
   eventName = res.match[1].trim()
   eventDate = chrono.parseDate(res.match[2].trim())
-  rsvpCloseDate = new Date()
-  rsvpCloseDate.setDate(eventDate.getDate() - 7)
   eventLocation = res.match[3].trim()
   currentEvents = getEvents(res.robot.brain)
   user = getUsername(res)
-
-  if eventName of currentEvents
-    res.send ALREADY_EXISTS(eventName)
-    return
 
   if !eventDate
     res.send BAD_TIME(user, eventName)
     return
 
-  newEvent = {
-    'name': eventName,
-    'description': '',
-    'location': eventLocation,
-    'date': eventDate,
-    'attendees': [user],
-    'creators': [user],
-    'rsvpCloseDate': rsvpCloseDate
-  }
+  if createEvent(res, eventName, eventLocation, eventDate)
+    res.send ADDED_BY(eventName, user)
 
-  eventReminder(res, newEvent)
-  setRsvpReminder(res, newEvent)
-
-  currentEvents[eventName] = newEvent
-  res.robot.brain.set('events', currentEvents)
-  res.send ADDED_BY(eventName, user)
   return
+
+addEventWithPoll = (res) ->
+  eventName = res.match[1].trim()
+  eventLocation = res.match[2].trim()
+  eventDateOptions = res.match[3].trim().split(',')
+
+  if not createEvent(res, eventName, eventLocation)
+    return
+
+  poll = createPoll(res, eventName, eventDateOptions)
+
+  if !poll
+    return
+
+
 
 joinEvent = (res) ->
   eventName = res.match[1].trim()
@@ -296,8 +349,8 @@ notifyAllAttendees = (res) ->
     res.send ONLY_ATTENDEES_CAN_NOTIFY()
     return
 
-  res.send NOTIFY_ATTENDEES(user, parseNotifyUsers(selectedEvent), eventName, message)  
-  
+  res.send NOTIFY_ATTENDEES(user, parseNotifyUsers(selectedEvent), eventName, message)
+
 addDescription = (res) ->
   eventName = res.match[1].trim()
   description = res.match[2].trim()
@@ -334,6 +387,7 @@ test = (res) ->
 module.exports = (robot) ->
 
   robot.respond /list/i, listEvents
+  robot.respond /organize ([\w ]+) with poll at ([\w ]+) for: ([\w:, ]+)$/i, addEventWithPoll
   robot.respond /organize ([\w ]+) for ([\w: ]+) at ([\w ]+)$/i, addEvent
   robot.respond /I'm in ([\w ]+)$/i, joinEvent
   robot.respond /abandon ([\w ]+)$/i, abandonEvent
