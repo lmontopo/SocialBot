@@ -37,6 +37,8 @@ DEADLINE_PASSED = (user, eventName) -> "@#{user} the deadline to join #{eventNam
 RSVP_REMINDER = (eventName, date) -> "@all Deadline to RSVP for #{eventName} is #{date}!"
 NEW_DEADLINE = (eventName, deadline) -> "The deadline to RSVP for #{eventName} is now #{getDateReadable deadline}."
 CHANGE_DEADLINE_FORBIDDEN = (user, creators, eventName) -> "@#{user} Only #{creators} can change the deadline to RSVP for #{eventName}."
+NOTIFY_ATTENDEES = (user, users, eventName, message) -> "Message from #{user} regarding #{eventName}:\n#{message}\n#{users}"
+ONLY_ATTENDEES_CAN_NOTIFY = () -> "Only attendees can send a notification about this event."
 
 getEvent = (eventName, brain) ->
   events = getEvents(brain)
@@ -99,6 +101,23 @@ parseNotifyUsers = (event) ->
 
 parseCreators = (event) ->
   return event.creators.join(', ')
+
+notifyAllAttendees = (res) ->
+  eventName = res.match[1].trim()
+  message = res.match[2].trim()
+  user = res.message.user.name
+  selectedEvent = getEvent(eventName, res.robot.brain)
+
+  if !selectedEvent
+    res.send NO_SUCH_EVENT(eventName)
+    return
+
+  if user not in selectedEvent.attendees
+    res.send ONLY_ATTENDEES_CAN_NOTIFY()
+    return
+
+  res.send NOTIFY_ATTENDEES(user, parseNotifyUsers(selectedEvent), eventName, message)
+
 
 listUsers = (res) ->
   eventName = res.match[1].trim()
@@ -227,7 +246,7 @@ editRSVP = (res) ->
   res.send NEW_DEADLINE(eventName, newDeadline)
 
 test = (res) ->
-  getEvents(res.robot.brain)
+  getEvents(res.roboto.brain)
 
 module.exports = (robot) ->
 
@@ -240,3 +259,4 @@ module.exports = (robot) ->
   robot.respond /(change|set) RSVP deadline for ([\w ]+) to ([\w: ]+)$/i, editRSVP
   robot.respond /test$/i, test
   robot.respond /remind about ([\w ]+$)/i, forceRemind
+  robot.respond /tell ([\w ]+) attendees \"(.+)\"$/i, notifyAllAttendees
