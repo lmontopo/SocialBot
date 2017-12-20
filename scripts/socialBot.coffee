@@ -45,6 +45,13 @@ NOTIFY_ATTENDEES = (user, users, eventName, message) -> "Message from #{user} re
 ONLY_ATTENDEES_CAN_NOTIFY = () -> "Only attendees can send a notification about this event."
 CANNOT_ABANDON = (user, eventName) -> "@#{user} You cannot abandon #{eventName} before selecting a replacement creator."
 ADD_DESCRIPTION_FORBIDDEN = (user, creators, eventName) -> "@#{user} Only #{creators} can edit the description of #{eventName}."
+POLL_CREATED = (eventName, poll) -> "@all A poll for #{eventName} has started. Tag socialbot with one of the following commands to vote:\n#{parseOptions(poll)}"
+POLL_CLOSED = (eventName, winner) -> "Poll for #{eventName} has closed. The winner is #{winner}!"
+NO_SUCH_POLL = (user, eventName) -> "@#{user} No poll exists for #{eventName}"
+NO_SUCH_OPTION = (user, option, eventName) -> "@#{user} No option '#{option}' in poll #{eventName}"
+YOU_ALREADY_VOTED = (user, eventName) -> "@#{user} You've already voted in the poll for #{eventName}"
+VOTE_SUCCESSFUL = (user, option, eventName) -> "@#{user} You've voted for #{option} in the poll for #{eventName}"
+NO_ONE_VOTED = (eventName, creators) -> "#{creators} No one voted in the poll for #{eventName}"
 
 
 #
@@ -53,6 +60,10 @@ ADD_DESCRIPTION_FORBIDDEN = (user, creators, eventName) -> "@#{user} Only #{crea
 getEvent = (eventName, brain) ->
   events = getEvents(brain)
   return events[eventName]
+
+getPoll = (eventName, brain) ->
+  polls = getPolls(brain)
+  return polls[eventName]
 
 getPolls = (brain) ->
   polls = brain.get('polls')
@@ -107,14 +118,17 @@ createPoll = (res, eventName, eventDateOptions) ->
     return false
 
   newPoll = {
-    options: {}
+    options: {},
+    eventName: eventName,
+    voted: []
   }
 
   for dateOption in eventDateOptions
     newPoll.options[dateOption] = 0
 
   polls[eventName] = newPoll
-
+  setPollDeadline(res, newPoll)
+  res.send POLL_CREATED(eventName, newPoll)
   return true
 
 
@@ -151,6 +165,14 @@ parseNotifyUsers = (event) ->
 parseCreators = (event) ->
   return event.creators.join(', ')
 
+parseNotifyCreators = (event) ->
+  creators = ('@' + creator for creator in event.creators)
+  return creators.join(', ')
+
+parseOptions = (poll) ->
+  options = ('vote ' + option + ' for ' + poll.eventName for option, val of poll.options)
+  return options.join('\n')
+ 
 
 #
 # Job Scheduling
@@ -176,7 +198,41 @@ setRsvpReminder = (res, selectedEvent) ->
   cancelScheduledJob(jobName)
   schedule.scheduleJob jobName, date, () -> res.send(RSVP_REMINDER(selectedEvent.name, getDateReadable(date)))
 
+setPollDeadline = (res, poll) ->
+  date = new Date()
+  date.setDate(date.getDate() + 1)
+  jobName = "#{poll.eventName})_POLL_CLOSE"
 
+  cancelScheduledJob(jobName)
+  schedule.scheduleJob jobName, date, () -> closePoll(res, poll)
+
+# TO-DO deal with ties
+closePoll = (res, poll) ->
+  selectedEvent = getEvent(poll.eventName, res.robot.brain)
+
+  if !poll.voted.length
+    res.send NO_ONE_VOTED(selectedEvent.name, parseNotifyCreators(selectedEvent))
+
+  else
+    winner = decideWinner(poll)
+    winner = chrono.parseDate(winner)
+
+    selectedEvent.date = winner
+
+    res.send POLL_CLOSED(selectedEvent.name, getDateReadable(winner))
+
+  delete getPolls(res.robot.brain)[poll.eventName]
+
+decideWinner = (poll) ->
+  winner = null
+  winningValue = 0
+
+  for option, val of poll.options
+    if val > winningValue
+      winningValue = val
+      winner = option
+
+  return winner
 
 #
 # User Command Handlers
@@ -217,8 +273,6 @@ addEventWithPoll = (res) ->
 
   if !poll
     return
-
-
 
 joinEvent = (res) ->
   eventName = res.match[1].trim()
@@ -380,13 +434,44 @@ getEventDetails = (res) ->
 
   res.send EVENT_DESCRIPTION(user, eventName, selectedEvent)
 
+vote = (res) ->
+  option = res.match[1].trim()
+  eventName = res.match[2].trim()
+  user = getUsername(res)
+  poll = getPoll(eventName, res.robot.brain)
+  # TO-DO: ADD ERROR MESSAGES
+
+  if !poll
+    res.send NO_SUCH_POLL(user, eventName)
+    return
+
+  if option not of poll.options
+    res.send NO_SUCH_OPTION(user, option, eventName)
+    return
+
+  if user in poll.voted
+    res.send YOU_ALREADY_VOTED(user, eventName)
+    return
+
+  poll.options[option] += 1
+  poll.voted.push(user)
+  res.send VOTE_SUCCESSFUL(user, option, eventName)
+
+
 test = (res) ->
-  getEvents(res.roboto.brain)
+  parseOptions({
+    eventName: 'Kelly',
+    options: {
+      'today': 0,
+      'tmr': 0
+    }
+    })
 
 
 module.exports = (robot) ->
 
   robot.respond /list/i, listEvents
+  robot.respond /vote ([\w: ]+) for ([\w ]+)$/i, vote
   robot.respond /organize ([\w ]+) with poll at ([\w ]+) for: ([\w:, ]+)$/i, addEventWithPoll
   robot.respond /organize ([\w ]+) for ([\w: ]+) at ([\w ]+)$/i, addEvent
   robot.respond /I'm in ([\w ]+)$/i, joinEvent
