@@ -11,11 +11,11 @@
 #Commands:
 #   SocialBot list - lists all upcoming social events.
 #   SocialBot who's in <event> - lists people who have RSVPed to <event>
-#   SocialBot organize <event-name> for <date> at <place> - Adds event to events list and starts an RSVP
+#   SocialBot organize <event-name> for <date-time> at <place> - Adds event to events list and starts an RSVP
 #   SocialBot I'm in for <event> - RSVPs you as coming to <event>
 #   SocialBot abandon <event> - Remove yourself from <event>
 #   SocialBot cancel <event> - removes <event> from upcoming events list
-#
+#   SocialBot (change|set) RSVP deadline for <event> to <date-time> - Set an RSVP deadline for <event> to be <date-time>. The default deadline is a week before <event> starts.
 
 chrono = require 'chrono-node'
 schedule = require 'node-schedule'
@@ -35,6 +35,8 @@ BAD_TIME = (user, eventName) -> "@#{user} You have entered an invalid time for #
 EVENT_REMINDER = (users, eventName) -> "REMINDER: Event #{eventName} is tomorrow!\n#{users}"
 DEADLINE_PASSED = (user, eventName) -> "@#{user} the deadline to join #{eventName} has passed."
 RSVP_REMINDER = (eventName, date) -> "@all Deadline to RSVP for #{eventName} is #{date}!"
+NEW_DEADLINE = (eventName, deadline) -> "The deadline to RSVP for #{eventName} is now #{getDateReadable deadline}."
+CHANGE_DEADLINE_FORBIDDEN = (user, creators, eventName) -> "@#{user} Only #{creators} can change the deadline to RSVP for #{eventName}."
 
 getEvent = (eventName, brain) ->
   events = getEvents(brain)
@@ -63,24 +65,26 @@ parseEvents = (results) ->
     parsedResults.push eventString
   return parsedResults.join('\n')
 
+cancelScheduledJob = (jobName) ->
+  job = schedule.scheduledJobs[jobName]
+  if job
+    job.cancel()
+
 eventReminder = (res, selectedEvent) ->
   date = getDate(selectedEvent.date)
   date.setDate(date.getDate() - 1)
-  month = date.getMonth()
-  day = date.getDate()
-  hour = date.getHours()
+  jobName = "#{selectedEvent.name}_REMIND"
 
-  schedule.scheduleJob "0 #{hour} #{day} #{month} *", () -> res.send(EVENT_REMINDER(parseNotifyUsers(selectedEvent), selectedEvent.name))
+  cancelScheduledJob(jobName)
+  schedule.scheduleJob jobName, date, () -> res.send(EVENT_REMINDER(parseNotifyUsers(selectedEvent), selectedEvent.name))
 
 setRsvpReminder = (res, selectedEvent) ->
   date = getDate(selectedEvent.rsvpCloseDate)
   date.setDate(date.getDate() - 1)
-  month = date.getMonth()
-  day = date.getDate()
-  hour = date.getHours()
+  jobName = "#{selectedEvent.name}_RSVP"
 
-  # schedule.scheduleJob "3 * * * *", () -> res.send(RSVP_REMINDER(selectedEvent.name, getDateReadable(date)))
-  schedule.scheduleJob "0 #{hour} #{day} #{month} *", () -> res.send(RSVP_REMINDER(selectedEvent.name, getDateReadable(date)))
+  cancelScheduledJob(jobName)  
+  schedule.scheduleJob jobName, date, () -> res.send(RSVP_REMINDER(selectedEvent.name, getDateReadable(date)))
 
 listEvents = (res) ->
   events = getEvents(res.robot.brain)
@@ -203,6 +207,25 @@ forceRemind = (res) ->
   res.send RSVP_REMINDER(eventName, date)
   return
 
+editRSVP = (res) ->
+  eventName = res.match[2].trim()
+  user = res.message.user.name
+  newDeadline = chrono.parseDate(res.match[3].trim())
+  selectedEvent = getEvent(eventName, res.robot.brain)
+
+  if user not in selectedEvent.creators
+    creators = parseCreators(selectedEvent)
+    res.send CHANGE_DEADLINE_FORBIDDEN(user, creators, eventName)
+    return
+
+  if !newDeadline
+    res.send BAD_TIME(user, eventName)
+    return
+
+  selectedEvent.rsvpCloseDate = newDeadline
+  setRsvpReminder(res, selectedEvent)
+  res.send NEW_DEADLINE(eventName, newDeadline)
+
 test = (res) ->
   getEvents(res.robot.brain)
 
@@ -214,5 +237,6 @@ module.exports = (robot) ->
   robot.respond /abandon ([\w ]+)$/i, abandonEvent
   robot.respond /who's in ([\w ]+)$/i, listUsers
   robot.respond /cancel ([\w ]+)$/i, cancelEvent
+  robot.respond /(change|set) RSVP deadline for ([\w ]+) to ([\w: ]+)$/i, editRSVP
   robot.respond /test$/i, test
   robot.respond /remind about ([\w ]+$)/i, forceRemind
