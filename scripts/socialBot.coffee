@@ -57,6 +57,9 @@ getDateReadable = (dateString) ->
   date = getDate(dateString)
   return date.toDateString() + ' at ' + date.toLocaleTimeString()
 
+getUsername = (res) ->
+  return res.message.user.name
+
 parseEvents = (results) ->
   if !results
     return NO_EVENTS()
@@ -84,7 +87,7 @@ setRsvpReminder = (res, selectedEvent) ->
   date.setDate(date.getDate() - 1)
   jobName = "#{selectedEvent.name}_RSVP"
 
-  cancelScheduledJob(jobName)  
+  cancelScheduledJob(jobName)
   schedule.scheduleJob jobName, date, () -> res.send(RSVP_REMINDER(selectedEvent.name, getDateReadable(date)))
 
 listEvents = (res) ->
@@ -116,7 +119,7 @@ addEvent = (res) ->
   rsvpCloseDate.setDate(eventDate.getDate() - 7)
   eventLocation = res.match[3].trim()
   currentEvents = getEvents(res.robot.brain)
-  user = res.message.user.name
+  user = getUsername(res)
 
   if eventName of currentEvents
     res.send ALREADY_EXISTS(eventName)
@@ -145,7 +148,7 @@ addEvent = (res) ->
 
 joinEvent = (res) ->
   eventName = res.match[1].trim()
-  user = res.message.user.name
+  user = getUsername(res)
   selectedEvent = getEvent(eventName, res.robot.brain)
   currentDate = new Date()
   rsvpCloseDate = getDate(selectedEvent.rsvpCloseDate)
@@ -189,7 +192,7 @@ addCreator = (res) ->
 
 abandonEvent = (res) ->
   eventName = res.match[1].trim()
-  user = res.message.user.name
+  user = getUsername(res)
   selectedEvent = getEvent(eventName, res.robot.brain)
 
   if !selectedEvent
@@ -207,7 +210,7 @@ abandonEvent = (res) ->
 
 cancelEvent = (res) ->
   eventName = res.match[1].trim()
-  user = res.message.user.name
+  user = getUsername(res)
   events = getEvents(res.robot.brain)
   selectedEvent = getEvent(eventName, res.robot.brain)
 
@@ -232,7 +235,7 @@ forceRemind = (res) ->
 
 editRSVP = (res) ->
   eventName = res.match[2].trim()
-  user = res.message.user.name
+  user = getUsername(res)
   newDeadline = chrono.parseDate(res.match[3].trim())
   selectedEvent = getEvent(eventName, res.robot.brain)
 
