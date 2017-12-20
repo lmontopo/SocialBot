@@ -30,13 +30,14 @@ NOW_ATTENDING = (user, eventName) -> "@#{user} You are now atending #{eventName}
 NEVER_ATTENDING = (user, eventName) -> "@#{user} You were not planning to attend #{eventName}."
 NO_LONGER_ATTENDING = (user, eventName) -> "@#{user} You are no longer attending #{eventName}."
 CANCEL_FORBIDDEN = (user, creators, eventName) -> "@#{user} Only #{creators} can cancel #{eventName}."
-CANCELLED = (user, eventName) -> "@#{user} You have cancelled #{eventName}."
+CANCELLED = (creator, users, eventName) -> "Event #{eventName} has been cancelled by #{creator}.\n#{users}"
 BAD_TIME = (user, eventName) -> "@#{user} You have entered an invalid time for #{eventName}"
 EVENT_REMINDER = (users, eventName) -> "REMINDER: Event #{eventName} is tomorrow!\n#{users}"
 DEADLINE_PASSED = (user, eventName) -> "@#{user} the deadline to join #{eventName} has passed."
 RSVP_REMINDER = (eventName, date) -> "@all Deadline to RSVP for #{eventName} is #{date}!"
 NEW_DEADLINE = (eventName, deadline) -> "The deadline to RSVP for #{eventName} is now #{getDateReadable deadline}."
 CHANGE_DEADLINE_FORBIDDEN = (user, creators, eventName) -> "@#{user} Only #{creators} can change the deadline to RSVP for #{eventName}."
+CANNOT_ABANDON = (user, eventName) -> "@#{user} You cannot abandon #{eventName} before selecting a replacement creator."
 
 getEvent = (eventName, brain) ->
   events = getEvents(brain)
@@ -177,6 +178,15 @@ abandonEvent = (res) ->
     res.send NEVER_ATTENDING(user, eventName)
     return
 
+  if user in selectedEvent.creators
+
+    if selectedEvent.creators.length == 1
+      res.send CANNOT_ABANDON(user, eventName)
+      return
+
+    creators = (c for c in selectedEvent.creators when c isnt user)
+    selectedEvent.creators = creators
+
   users = (u for u in selectedEvent.attendees when u isnt user)
   selectedEvent.attendees = users
 
@@ -198,7 +208,7 @@ cancelEvent = (res) ->
     return
 
   delete events[eventName]
-  res.send CANCELLED(user, eventName)
+  res.send CANCELLED(user, parseNotifyUsers(selectedEvent), eventName)
 
 forceRemind = (res) ->
   eventName = res.match[1].trim()
