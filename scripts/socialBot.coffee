@@ -182,6 +182,15 @@ cancelScheduledJob = (jobName) ->
   if job
     job.cancel()
 
+cancelAllScheduledJobs = (eventName) ->
+  jobNames = [
+    "#{eventName}_REMIND"
+    "#{eventName}_RSVP"
+    "#{eventName}_POLL_CLOSE"
+  ]
+
+  cancelScheduledJob(jobName) for jobName in jobNames
+
 eventReminder = (res, selectedEvent) ->
   date = getDate(selectedEvent.date)
   date.setDate(date.getDate() - 1)
@@ -350,6 +359,7 @@ cancelEvent = (res) ->
   user = getUsername(res)
   events = getEvents(res.robot.brain)
   selectedEvent = getEvent(eventName, res.robot.brain)
+  poll = getPoll(eventName, res.robot.brain)
 
   if !selectedEvent
     res.send NO_SUCH_EVENT(eventName)
@@ -359,6 +369,11 @@ cancelEvent = (res) ->
     creators = parseCreators(selectedEvent)
     res.send CANCEL_FORBIDDEN(user, creators, eventName)
     return
+
+  if poll
+    delete getPolls(res.robot.brain)[eventName]
+
+  cancelAllScheduledJobs(eventName)
 
   delete events[eventName]
   res.send CANCELLED(user, parseNotifyUsers(selectedEvent), eventName)
