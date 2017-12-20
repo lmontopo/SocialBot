@@ -11,7 +11,7 @@
 #Commands:
 #   SocialBot list - lists all upcoming social events.
 #   SocialBot who's in <event> - lists people who have RSVPed to <event>
-#   SocialBot organize <event-name> for <date-time>> at <place> - Adds event to events list and starts an RSVP
+#   SocialBot organize <event-name> for <date-time> at <place> - Adds event to events list and starts an RSVP
 #   SocialBot I'm in for <event> - RSVPs you as coming to <event>
 #   SocialBot abandon <event> - Remove yourself from <event>
 #   SocialBot cancel <event> - removes <event> from upcoming events list
@@ -65,25 +65,26 @@ parseEvents = (results) ->
     parsedResults.push eventString
   return parsedResults.join('\n')
 
-eventReminder = (res, selectedEvent) ->
-  date = getDate(selectedEvent.date)
-  date.setDate(date.getDate() - 1)
-
-  job = schedule.scheduledJobs["#{selectedEvent.name}_REMIND"]
+cancelScheduledJob = (jobName) ->
+  job = schedule.scheduledJobs[jobName]
   if job
     job.cancel()
 
-  schedule.scheduleJob "#{selectedEvent.name}_REMIND", date, () -> res.send(EVENT_REMINDER(parseNotifyUsers(selectedEvent), selectedEvent.name))
+eventReminder = (res, selectedEvent) ->
+  date = getDate(selectedEvent.date)
+  date.setDate(date.getDate() - 1)
+  jobName = "#{selectedEvent.name}_REMIND"
+
+  cancelScheduledJob(jobName)
+  schedule.scheduleJob jobName, date, () -> res.send(EVENT_REMINDER(parseNotifyUsers(selectedEvent), selectedEvent.name))
 
 setRsvpReminder = (res, selectedEvent) ->
   date = getDate(selectedEvent.rsvpCloseDate)
   date.setDate(date.getDate() - 1)
+  jobName = "#{selectedEvent.name}_RSVP"
 
-  job = schedule.scheduledJobs["#{selectedEvent.name}_RSVP"]
-  if job
-    job.cancel()
-  
-  schedule.scheduleJob "#{selectedEvent.name}_RSVP", date, () -> res.send(RSVP_REMINDER(selectedEvent.name, getDateReadable(date)))
+  cancelScheduledJob(jobName)  
+  schedule.scheduleJob jobName, date, () -> res.send(RSVP_REMINDER(selectedEvent.name, getDateReadable(date)))
 
 listEvents = (res) ->
   events = getEvents(res.robot.brain)
