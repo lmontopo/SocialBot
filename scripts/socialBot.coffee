@@ -38,6 +38,8 @@ RSVP_REMINDER = (eventName, date) -> "@all Deadline to RSVP for #{eventName} is 
 CREATOR_ADDED = (user, eventName) -> "@#{user} is now a creator of #{eventName}."
 NEW_DEADLINE = (eventName, deadline) -> "The deadline to RSVP for #{eventName} is now #{getDateReadable deadline}."
 CHANGE_DEADLINE_FORBIDDEN = (user, creators, eventName) -> "@#{user} Only #{creators} can change the deadline to RSVP for #{eventName}."
+NOTIFY_ATTENDEES = (user, users, eventName, message) -> "Message from #{user} regarding #{eventName}:\n#{message}\n#{users}"
+ONLY_ATTENDEES_CAN_NOTIFY = () -> "Only attendees can send a notification about this event."
 CANNOT_ABANDON = (user, eventName) -> "@#{user} You cannot abandon #{eventName} before selecting a replacement creator."
 
 
@@ -112,6 +114,7 @@ setRsvpReminder = (res, selectedEvent) ->
 
   cancelScheduledJob(jobName)
   schedule.scheduleJob jobName, date, () -> res.send(RSVP_REMINDER(selectedEvent.name, getDateReadable(date)))
+
 
 
 #
@@ -274,8 +277,24 @@ editRSVP = (res) ->
   setRsvpReminder(res, selectedEvent)
   res.send NEW_DEADLINE(eventName, newDeadline)
 
+notifyAllAttendees = (res) ->
+  eventName = res.match[1].trim()
+  message = res.match[2].trim()
+  user = res.message.user.name
+  selectedEvent = getEvent(eventName, res.robot.brain)
+
+  if !selectedEvent
+    res.send NO_SUCH_EVENT(eventName)
+    return
+
+  if user not in selectedEvent.attendees
+    res.send ONLY_ATTENDEES_CAN_NOTIFY()
+    return
+
+  res.send NOTIFY_ATTENDEES(user, parseNotifyUsers(selectedEvent), eventName, message)  
+  
 test = (res) ->
-  getEvents(res.robot.brain)
+  getEvents(res.roboto.brain)
 
 
 module.exports = (robot) ->
@@ -289,4 +308,5 @@ module.exports = (robot) ->
   robot.respond /(change|set) RSVP deadline for ([\w ]+) to ([\w: ]+)$/i, editRSVP
   robot.respond /test$/i, test
   robot.respond /remind about ([\w ]+$)/i, forceRemind
+  robot.respond /tell ([\w ]+) attendees \"(.+)\"$/i, notifyAllAttendees
   robot.respond /add creator ([\w ]+) to ([\w ]+)/i, addCreator
