@@ -9,16 +9,21 @@
 #   These are from the scripting documentation: https://github.com/github/hubot/blob/master/docs/scripting.md
 #
 #Commands:
-#   SocialBot list - lists all upcoming social events.
-#   SocialBot who's in <event> - lists people who have RSVPed to <event>
-#   SocialBot organize <event-name> for <date-time> at <place> - Adds event to events list and starts an RSVP
-#   SocialBot I'm in for <event> - RSVPs you as coming to <event>
-#   SocialBot abandon <event> - Remove yourself from <event>
-#   SocialBot cancel <event> - removes <event> from upcoming events list
-#   SocialBot (change|set) RSVP deadline for <event> to <date-time> - Set an RSVP deadline for <event> to be <date-time>. The default deadline is a week before <event> starts.
-#   SocialBot add description to <event-name>: <description> - Add a description to an event
-#   SocialBot get details <event-name> - See event name, date, time and description
-#   SocialBot change <event-name> time to <date-time> - Update the <date-time> of <event-name>
+#   SocialBot list - List all upcoming social events.
+#   SocialBot who's in <event-name> - List people who have RSVPed as going to <event>.
+#   SocialBot organize <event-name> for <date-time> at <place> - Add event to events list and start accepting RSVPs.
+#   SocialBot organize <event-name> with poll at <event-place> for <comma-separated-choices-of-date-time> - Add event to events list and creates a poll for the event time with choices mentioned.  Poll lasts 24 hours.
+#   SocialBot I'm in for <event-name> - Add yourself to attendees for <event-name>.
+#   SocialBot abandon <event-name> - Remove yourself from <event-name>.
+#   SocialBot cancel <event-name> - Remove <event-name> from upcoming events list.
+#   SocialBot (change|set) RSVP deadline for <event-name> to <date-time> - Set an RSVP deadline for <event-name> to be <date-time>. The default deadline is a week before <event> starts.
+#   SocialBot add description to <event-name>: <description> - Add a description to an event.
+#   SocialBot get details <event-name> - See event name, date, time and description.
+#   SocialBot change <event-name> time to <date-time> - Update the <date-time> of <event-name>.
+#   SocialBot vote <choice> for <event-name> - Vote for date <choice> in the poll for <event-name>.
+#   SocialBot remind about <event-name> - Remind all attendees of <event-name> about the event.
+#   SocialBot add creator <username> to <event-name> - Add a user as an organizer of an event.
+#   SocialBot tell <event-name> atteendees <message> - Ping all attendees of <event-name> with custom message.
 
 chrono = require 'chrono-node'
 schedule = require 'node-schedule'
@@ -537,10 +542,12 @@ module.exports = (robot) ->
   robot.respond /who's in ([\w ]+)$/i, listUsers
   robot.respond /cancel ([\w ]+)$/i, cancelEvent
   robot.respond /(change|set) RSVP deadline for ([\w ]+) to ([\w: ]+)$/i, editRSVP
-  robot.respond /test$/i, test
   robot.respond /remind about ([\w ]+$)/i, forceRemind
   robot.respond /tell ([\w ]+) attendees \"(.+)\"$/i, notifyAllAttendees
   robot.respond /add creator ([\w ]+) to ([\w ]+)/i, addCreator
   robot.respond /add description to ([\w ]+): (.+)$/i, addDescription
   robot.respond /get details ([\w ]+)$/i, getEventDetails
   robot.respond /change ([\w ]+) time to ([\w: ]+)$/i, editEventTime
+
+  # Test
+  robot.respond /test$/i, test
