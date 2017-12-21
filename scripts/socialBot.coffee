@@ -58,6 +58,8 @@ NO_ONE_VOTED = (eventName, creators) -> "#{creators} No one voted in the poll fo
 TIME_CHANGE_DURING_POLL_FORBIDDEN = (user, eventName) -> "@#{user} Wait for poll to end before changing the time for #{eventName}."
 NOT_CREATOR = (user, creators, eventName) -> "@#{user} Only #{creators} can modify #{eventName}."
 CREATOR_BREAK_TIE = (eventName, creators, winners) -> "#{creators} The poll for #{eventName} resulted in a tie. Tag socialbot with one of the winners:\n#{winners}"
+EVENT_FOLLOW_UP = (eventName, creators) -> "#{creators} Who showed up for the <event-name> yesterday?"
+SHAME = (eventName, users) -> "SHAME.  You all said you'd show up to #{eventName} and you didn't!\n#{users}"
 
 #
 # Helper Methods
@@ -159,16 +161,12 @@ listEvents = (res) ->
 parseUsers = (event) ->
   return event.attendees.join(', ')
 
-parseNotifyUsers = (event) ->
-  users = ('@' + user for user in event.attendees)
+parseNotify = (users) ->
+  users = ('@' + user for user in users)
   return users.join(', ')
 
 parseCreators = (event) ->
   return event.creators.join(', ')
-
-parseNotifyCreators = (event) ->
-  creators = ('@' + creator for creator in event.creators)
-  return creators.join(', ')
 
 parseOptions = (poll) ->
   options = ('vote ' + option + ' for ' + poll.eventName for option, val of poll.options)
@@ -177,6 +175,19 @@ parseOptions = (poll) ->
 parseWinningDates = (eventName, winners) ->
   options = ('change ' + eventName + ' time to ' + getDateReadable(winner) for winner in winners)
   return options.join('\n')
+
+decideWinner = (poll) ->
+  winners = []
+  winningValue = 0
+
+  for option, val of poll.options
+    if val == winningValue
+      winners.push(option)
+    else if val > winningValue
+      winningValue = val
+      winners = [option]
+
+  return winners
 
 
 #
@@ -202,7 +213,7 @@ eventReminder = (res, selectedEvent) ->
   jobName = "#{selectedEvent.name}_REMIND"
 
   cancelScheduledJob(jobName)
-  schedule.scheduleJob jobName, date, () -> res.send(EVENT_REMINDER(parseNotifyUsers(selectedEvent), selectedEvent.name))
+  schedule.scheduleJob jobName, date, () -> res.send(EVENT_REMINDER(parseNotify(selectedEvent.attendees), selectedEvent.name))
 
 setRsvpReminder = (res, selectedEvent) ->
   date = getDate(selectedEvent.rsvpCloseDate)
@@ -223,7 +234,7 @@ setPollDeadline = (res, poll) ->
 closePoll = (res, poll) ->
   selectedEvent = getEvent(poll.eventName, res.robot.brain)
   eventName = selectedEvent.name
-  creators = parseNotifyCreators(selectedEvent)
+  creators = parseNotify(selectedEvent.creators)
 
   if !poll.voted.length
     res.send NO_ONE_VOTED(eventName, creators)
@@ -243,18 +254,19 @@ closePoll = (res, poll) ->
 
   delete getFromRedis(res.robot.brain, 'polls')[eventName]
 
-decideWinner = (poll) ->
-  winners = []
-  winningValue = 0
+eventFollowup = (res, eventName) ->
+  # create a job to follow up with creator the day after an event to ask who showed
+  selectedEvent = getEvent(eventName, res.robot.brain)
+  creators = parseNotify(selectedEvent.creators)
+  date = getDate(selectedEvent.date)
+  date.setDate(date.getDate() + 1)
 
-  for option, val of poll.options
-    if val == winningValue
-      winners.push(option)
-    else if val > winningValue
-      winningValue = val
-      winners = [option]
+  jobName = "#{eventName.eventName})_WHO_ATTENDED"
 
-  return winners
+  cancelScheduledJob(jobName)
+
+  schedule.scheduleJob jobName, date, () -> res.send(EVENT_FOLLOW_UP(eventName, creators))
+
 
 
 #
@@ -281,6 +293,8 @@ addEvent = (res) ->
 
   if createEvent(res, eventName, eventLocation, eventDate)
     res.send ADDED_BY(eventName, user)
+
+  eventFollowup(res, eventName)
 
   return
 
@@ -390,7 +404,7 @@ cancelEvent = (res) ->
   cancelAllScheduledJobs(eventName)
 
   delete events[eventName]
-  res.send CANCELLED(user, parseNotifyUsers(selectedEvent), eventName)
+  res.send CANCELLED(user, parseNotify(selectedEvent.attendees), eventName)
 
 forceRemind = (res) ->
   eventName = res.match[1].trim()
@@ -432,7 +446,7 @@ notifyAllAttendees = (res) ->
     res.send ONLY_ATTENDEES_CAN_NOTIFY()
     return
 
-  res.send NOTIFY_ATTENDEES(user, parseNotifyUsers(selectedEvent), eventName, message)
+  res.send NOTIFY_ATTENDEES(user, parseNotify(selectedEvent.attendees), eventName, message)
 
 addDescription = (res) ->
   eventName = res.match[1].trim()
@@ -498,7 +512,6 @@ vote = (res) ->
   eventName = res.match[2].trim()
   user = getUsername(res)
   poll = getPoll(eventName, res.robot.brain)
-  # TO-DO: ADD ERROR MESSAGES
 
   if !poll
     res.send NO_SUCH_POLL(user, eventName)
@@ -515,6 +528,19 @@ vote = (res) ->
   poll.options[option] += 1
   poll.voted.push(user)
   res.send VOTE_SUCCESSFUL(user, option, eventName)
+
+eventAttendance = (res) ->
+  eventName = res.match[1].trim()
+  selectedEvent = getEvent(eventName, res.robot.brain)
+
+  if !selectedEvent
+    res.send NO_SUCH_EVENT(eventName)
+
+  actualAttendees = res.match[2].trim().split(',')
+  eventAttendees = selectedEvent.attendees
+  bailers = (user for user in eventAttendees if user not in actualAttendees)
+
+  res.send SHAME(eventName, parseNotify(bailers))
 
 
 test = (res) ->
@@ -544,6 +570,7 @@ module.exports = (robot) ->
   robot.respond /add description to ([\w ]+): (.+)$/i, addDescription
   robot.respond /get details ([\w ]+)$/i, getEventDetails
   robot.respond /change ([\w ]+) time to ([\w: ]+)$/i, editEventTime
+  robot.respond /The following people showed up to ([\w ]+): ([\w, ]+)$/i, eventAttendance
 
   # Test
   robot.respond /test$/i, test
