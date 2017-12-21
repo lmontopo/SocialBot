@@ -21,7 +21,7 @@
 #   SocialBot get details <event-name> - See event name, date, time and description.
 #   SocialBot change <event-name> time to <date-time> - Update the <date-time> of <event-name>.
 #   SocialBot vote <choice> for <event-name> - Vote for date <choice> in the poll for <event-name>.
-#   SocialBot remind about <event-name> - Remind all attendees of <event-name> about the event.
+#   SocialBot remind about <event-name> - Remind people to RSVP for <event-name> before deadline.
 #   SocialBot add creator <username> to <event-name> - Add a user as an organizer of an event.
 #   SocialBot tell <event-name> atteendees <message> - Ping all attendees of <event-name> with custom message.
 
@@ -32,7 +32,7 @@ NO_SUCH_EVENT = (eventName) -> "An event with the name #{eventName} does not exi
 ALREADY_EXISTS = (eventName) -> "An event with the name #{eventName} already exists."
 NO_EVENTS = () -> "There are no upcoming social events."
 EVENT_DETAILS = (selectedEvent, details) -> "#{selectedEvent} at #{details.location} on #{getDateReadable details.date}."
-EVENT_DESCRIPTION = (user, selectedEvent, details) ->"@#{user} #{EVENT_DETAILS(selectedEvent, details)}\n\t#{details.description}"
+EVENT_DESCRIPTION = (user, selectedEvent, details) ->"@#{user} #{EVENT_DETAILS(selectedEvent, details)}\n\t#{details.description || "No description"} "
 ADDED_BY = (eventName, user) -> "#{eventName} was added by @#{user}."
 ALREADY_ATTENDING = (user, eventName) -> "@#{user} You are already attending #{eventName}."
 NOW_ATTENDING = (user, eventName) -> "@#{user} You are now attending #{eventName}."
@@ -63,29 +63,22 @@ CREATOR_BREAK_TIE = (eventName, creators, winners) -> "#{creators} The poll for 
 # Helper Methods
 #
 getEvent = (eventName, brain) ->
-  events = getEvents(brain)
+  events = getFromRedis(brain, 'events')
   return events[eventName]
 
 getPoll = (eventName, brain) ->
-  polls = getPolls(brain)
+  polls = getFromRedis(brain, 'polls')
   return polls[eventName]
 
-getPolls = (brain) ->
-  polls = brain.get('polls')
-  if !polls
-    brain.set('polls', {})
-
-  return brain.get('polls')
-
-getEvents = (brain) ->
-  events = brain.get('events')
+getFromRedis = (brain, key) ->
+  events = brain.get(key)
   if !events
-    brain.set('events', {})
+    brain.set(key, {})
 
-  return brain.get('events')
+  return brain.get(key)
 
 createEvent = (res, eventName, eventLocation, eventDate = undefined) ->
-  currentEvents = getEvents(res.robot.brain)
+  currentEvents = getFromRedis(res.robot.brain, 'events')
   user = getUsername(res)
 
   if eventName of currentEvents
@@ -117,7 +110,7 @@ createEvent = (res, eventName, eventLocation, eventDate = undefined) ->
   return true
 
 createPoll = (res, eventName, eventDateOptions) ->
-  polls = getPolls(res.robot.brain)
+  polls = getFromRedis(res.robot.brain, 'polls')
 
   if eventName of polls
     return false
@@ -141,6 +134,9 @@ getDate = (dateString) ->
   return new Date(dateString)
 
 getDateReadable = (dateString) ->
+  if dateString is undefined
+    return 'Undecided date and time'
+
   date = getDate(dateString)
   return date.toDateString() + ' at ' + date.toLocaleTimeString()
 
@@ -157,7 +153,7 @@ parseEvents = (results) ->
   return parsedResults.join('\n')
 
 listEvents = (res) ->
-  events = getEvents(res.robot.brain)
+  events = getFromRedis(res.robot.brain, 'events')
   res.send parseEvents(events)
 
 parseUsers = (event) ->
@@ -245,7 +241,7 @@ closePoll = (res, poll) ->
     else
       res.send CREATOR_BREAK_TIE(eventName, creators, parseWinningDates(eventName, winners))
 
-  delete getPolls(res.robot.brain)[eventName]
+  delete getFromRedis(res.robot.brain, 'polls')[eventName]
 
 decideWinner = (poll) ->
   winners = []
@@ -276,7 +272,7 @@ addEvent = (res) ->
   eventName = res.match[1].trim()
   eventDate = chrono.parseDate(res.match[2].trim())
   eventLocation = res.match[3].trim()
-  currentEvents = getEvents(res.robot.brain)
+  currentEvents = getFromRedis(res.robot.brain, 'events')
   user = getUsername(res)
 
   if !eventDate
@@ -327,7 +323,7 @@ addCreator = (res) ->
   newCreator = res.match[1].trim()
   eventName = res.match[2].trim()
   user = getUsername(res)
-  events = getEvents(res.robot.brain)
+  events = getFromRedis(res.robot.brain, 'events')
   selectedEvent = getEvent(eventName, res.robot.brain)
 
   if !selectedEvent
@@ -375,7 +371,7 @@ abandonEvent = (res) ->
 cancelEvent = (res) ->
   eventName = res.match[1].trim()
   user = getUsername(res)
-  events = getEvents(res.robot.brain)
+  events = getFromRedis(res.robot.brain, 'events')
   selectedEvent = getEvent(eventName, res.robot.brain)
   poll = getPoll(eventName, res.robot.brain)
 
@@ -389,7 +385,7 @@ cancelEvent = (res) ->
     return
 
   if poll
-    delete getPolls(res.robot.brain)[eventName]
+    delete getFromRedis(res.robot.brain, 'polls')[eventName]
 
   cancelAllScheduledJobs(eventName)
 
