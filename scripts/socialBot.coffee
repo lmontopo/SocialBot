@@ -65,6 +65,7 @@ SHAME = (eventName, users) -> "SHAME.  You all said you'd show up to #{eventName
 # Helper Methods
 #
 getEvent = (eventName, brain) ->
+  console.log(eventName)
   events = getFromRedis(brain, 'events')
   return events[eventName]
 
@@ -73,8 +74,8 @@ getPoll = (eventName, brain) ->
   return polls[eventName]
 
 getFromRedis = (brain, key) ->
-  events = brain.get(key)
-  if !events
+  items = brain.get(key)
+  if !items
     brain.set(key, {})
 
   return brain.get(key)
@@ -131,7 +132,6 @@ createPoll = (res, eventName, eventDateOptions) ->
   res.send POLL_CREATED(eventName, newPoll)
   return true
 
-
 getDate = (dateString) ->
   return new Date(dateString)
 
@@ -146,7 +146,7 @@ getUsername = (res) ->
   return res.message.user.name
 
 parseEvents = (results) ->
-  if Object.keys(results).length == 0
+  if results.length == 0
     return NO_EVENTS()
   parsedResults = ["Upcoming Social Events:"]
   for selectedEvent, details of results
@@ -269,8 +269,20 @@ eventFollowup = (res, eventName) ->
 # User Command Handlers
 #
 listEvents = (res) ->
-  events = getFromRedis(res.robot.brain, 'events')
-  res.send parseEvents(events)
+  allEventNames = Object.keys(getFromRedis(res.robot.brain, 'events'))
+  if allEventNames.length == 0
+    res.send NO_EVENTS()
+    return
+
+  currentEvents = []
+  startOfToday = new Date()
+  startOfToday.setHours(0,0,0,0)
+  for e in allEventNames
+    eventObj = getEvent(e, res.robot.brain)
+    if getDate(eventObj.date) > startOfToday
+      currentEvents.push(eventObj)
+
+  res.send parseEvents(currentEvents)
 
 listUsers = (res) ->
   eventName = res.match[1].trim()
@@ -536,6 +548,13 @@ vote = (res) ->
   res.send VOTE_SUCCESSFUL(user, option, eventName)
 
 eventAttendance = (res) ->
+  user = getUsername(res)
+
+  if user not in selectedEvent.creators
+    creators = parseCreators(selectedEvent)
+    res.send NOT_CREATOR(user, creators, eventName)
+    return
+
   eventName = res.match[1].trim()
   selectedEvent = getEvent(eventName, res.robot.brain)
 
