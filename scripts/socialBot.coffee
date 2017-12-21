@@ -528,7 +528,7 @@ test = (res) ->
       'today': 0,
       'tmr': 0
     }
-    })
+  })
 
 
 module.exports = (robot) ->
