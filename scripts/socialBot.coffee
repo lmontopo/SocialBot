@@ -150,8 +150,8 @@ parseEvents = (results) ->
   if results.length == 0
     return NO_EVENTS()
   parsedResults = ["Upcoming Social Events:"]
-  for selectedEvent, details of results
-    eventString = EVENT_DETAILS(selectedEvent, details)
+  for selectedEvent in results
+    eventString = EVENT_DETAILS(selectedEvent.name, selectedEvent)
     parsedResults.push eventString
   return parsedResults.join('\n')
 
