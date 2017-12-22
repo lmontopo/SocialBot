@@ -24,6 +24,8 @@
 #   SocialBot remind about <event-name> - Remind people to RSVP for <event-name> before deadline.
 #   SocialBot add creator <username> to <event-name> - Add a user as an organizer of an event.
 #   SocialBot tell <event-name> attendees <message> - Ping all attendees of <event-name> with custom message.
+#   SocialBot The following people showed up to <event-name>: <comma-separated-usernames> - Tell SocialBot who actually attended <event-name>.
+
 
 chrono = require 'chrono-node'
 schedule = require 'node-schedule'
