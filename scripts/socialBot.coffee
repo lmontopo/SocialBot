@@ -65,7 +65,6 @@ SHAME = (eventName, users) -> "SHAME.  You all said you'd show up to #{eventName
 # Helper Methods
 #
 getEvent = (eventName, brain) ->
-  console.log(eventName)
   events = getFromRedis(brain, 'events')
   return events[eventName]
 
@@ -199,6 +198,7 @@ cancelAllScheduledJobs = (eventName) ->
     "#{eventName}_REMIND"
     "#{eventName}_RSVP"
     "#{eventName}_POLL_CLOSE"
+    "#{eventName}_WHO_ATTENDED"
   ]
 
   cancelScheduledJob(jobName) for jobName in jobNames
@@ -222,7 +222,7 @@ setRsvpReminder = (res, selectedEvent) ->
 setPollDeadline = (res, poll) ->
   date = new Date()
   date.setDate(date.getDate() + 1)
-  jobName = "#{poll.eventName})_POLL_CLOSE"
+  jobName = "#{poll.eventName}_POLL_CLOSE"
 
   cancelScheduledJob(jobName)
   schedule.scheduleJob jobName, date, () -> closePoll(res, poll)
@@ -257,7 +257,7 @@ eventFollowup = (res, eventName) ->
   date = getDate(selectedEvent.date)
   date.setDate(date.getDate() + 1)
 
-  jobName = "#{eventName.eventName})_WHO_ATTENDED"
+  jobName = "#{eventName}_WHO_ATTENDED"
 
   cancelScheduledJob(jobName)
 
