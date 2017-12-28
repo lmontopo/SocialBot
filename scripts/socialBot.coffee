@@ -60,7 +60,7 @@ NO_ONE_VOTED = (eventName, creators) -> "#{creators} No one voted in the poll fo
 TIME_CHANGE_DURING_POLL_FORBIDDEN = (user, eventName) -> "@#{user} Wait for poll to end before changing the time for #{eventName}."
 NOT_CREATOR = (user, creators, eventName) -> "@#{user} Only #{creators} can modify #{eventName}."
 CREATOR_BREAK_TIE = (eventName, creators, winners) -> "#{creators} The poll for #{eventName} resulted in a tie. Tag socialbot with one of the winners:\n#{winners}"
-EVENT_FOLLOW_UP = (eventName, creators) -> "#{creators} Who showed up for the <event-name> yesterday?"
+EVENT_FOLLOW_UP = (eventName, creators) -> "#{creators} Who showed up for the #{eventName}?"
 SHAME = (eventName, users) -> "SHAME.  You all said you'd show up to #{eventName} and you didn't!\n#{users}"
 
 #
@@ -68,7 +68,6 @@ SHAME = (eventName, users) -> "SHAME.  You all said you'd show up to #{eventName
 #
 getEvent = (eventName, brain) ->
   events = getFromRedis(brain, 'events')
-
   return events[eventName]
 
 getPoll = (eventName, brain) ->
@@ -552,14 +551,13 @@ vote = (res) ->
 
 eventAttendance = (res) ->
   user = getUsername(res)
+  eventName = res.match[1].trim()
+  selectedEvent = getEvent(eventName, res.robot.brain)
 
   if user not in selectedEvent.creators
     creators = parseCreators(selectedEvent)
     res.send NOT_CREATOR(user, creators, eventName)
     return
-
-  eventName = res.match[1].trim()
-  selectedEvent = getEvent(eventName, res.robot.brain)
 
   if !selectedEvent
     res.send NO_SUCH_EVENT(eventName)
@@ -567,7 +565,7 @@ eventAttendance = (res) ->
 
   actualAttendees = res.match[2].trim().split(',')
   eventAttendees = selectedEvent.attendees
-  bailers = (user for user in eventAttendees if user not in actualAttendees)
+  bailers = (user for user in eventAttendees when user not in actualAttendees)
 
   res.send SHAME(eventName, parseNotify(bailers))
 
