@@ -12,7 +12,7 @@
 #   SocialBot list - List all upcoming social events.
 #   SocialBot who's in <event-name> - List people who have RSVPed as going to <event>.
 #   SocialBot organize <event-name> for <date-time> at <place> - Add event to events list and start accepting RSVPs.
-#   SocialBot organize <event-name> with poll at <event-place> for <comma-separated-choices-of-date-time> - Add event to events list and creates a poll for the event time with choices mentioned.  Poll lasts 24 hours.
+#   SocialBot organize <event-name> with poll at <event-place> for: <comma-separated-choices-of-date-time> - Add event to events list and creates a poll for the event time with choices mentioned.  Poll lasts 24 hours.
 #   SocialBot I'm in for <event-name> - Add yourself to attendees for <event-name>.
 #   SocialBot abandon <event-name> - Remove yourself from <event-name>.
 #   SocialBot cancel <event-name> - Remove <event-name> from upcoming events list.
@@ -244,8 +244,8 @@ closePoll = (res, poll) ->
     if winners.length == 1
       selectedEvent.date = winner
       res.send POLL_CLOSED(eventName, getDateReadable(winner))
-      eventReminder(res, eventName)
-      setRsvpReminder(res, eventName)
+      eventReminder(res, selectedEvent)
+      setRsvpReminder(res, selectedEvent)
 
     else
       res.send CREATOR_BREAK_TIE(eventName, creators, parseWinningDates(eventName, winners))
@@ -522,8 +522,8 @@ editEventTime = (res) ->
     return
 
   selectedEvent.date = eventDate
-  eventReminder(res, eventName)
-  setRsvpReminder(res, eventName)
+  eventReminder(res, selectedEvent)
+  setRsvpReminder(res, selectedEvent)
 
   res.send EVENT_DESCRIPTION(user, eventName, selectedEvent)
 
@@ -567,7 +567,8 @@ eventAttendance = (res) ->
   eventAttendees = selectedEvent.attendees
   bailers = (user for user in eventAttendees when user not in actualAttendees)
 
-  res.send SHAME(eventName, parseNotify(bailers))
+  if bailers.length > 0
+    res.send SHAME(eventName, parseNotify(bailers))
 
 
 test = (res) ->
@@ -578,6 +579,9 @@ test = (res) ->
       'tmr': 0
     }
   })
+
+  console.log(schedule.scheduledJobs)
+
 
 
 module.exports = (robot) ->
