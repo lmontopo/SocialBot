@@ -68,6 +68,7 @@ SHAME = (eventName, users) -> "SHAME.  You all said you'd show up to #{eventName
 #
 getEvent = (eventName, brain) ->
   events = getFromRedis(brain, 'events')
+
   return events[eventName]
 
 getPoll = (eventName, brain) ->
@@ -92,7 +93,7 @@ createEvent = (res, eventName, eventLocation, eventDate = undefined) ->
   rsvpCloseDate = undefined
 
   if eventDate
-    rsvpCloseDate = new Date()
+    rsvpCloseDate = new Date(eventDate)
     rsvpCloseDate.setDate(eventDate.getDate() - 7)
 
   newEvent = {
@@ -281,7 +282,7 @@ listEvents = (res) ->
   startOfToday.setHours(0,0,0,0)
   for e in allEventNames
     eventObj = getEvent(e, res.robot.brain)
-    if getDate(eventObj.date) > startOfToday
+    if getDate(eventObj.date) >= startOfToday
       currentEvents.push(eventObj)
 
   res.send parseEvents(currentEvents)
@@ -346,7 +347,7 @@ joinEvent = (res) ->
     return
 
   selectedEvent.attendees.push(user)
-  res.send NOW_ATTENDING(eventName)
+  res.send NOW_ATTENDING(user, eventName)
 
 addCreator = (res) ->
   newCreator = res.match[1].trim()
