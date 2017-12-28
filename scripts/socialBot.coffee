@@ -110,6 +110,7 @@ createEvent = (res, eventName, eventLocation, eventDate = undefined) ->
   if eventDate
     eventReminder(res, newEvent)
     setRsvpReminder(res, newEvent)
+    eventFollowup(res, eventName)
 
   return true
 
@@ -262,9 +263,7 @@ eventFollowup = (res, eventName) ->
   jobName = "#{eventName}_WHO_ATTENDED"
 
   cancelScheduledJob(jobName)
-
   schedule.scheduleJob jobName, date, () -> res.send(EVENT_FOLLOW_UP(eventName, creators))
-
 
 
 #
@@ -307,8 +306,6 @@ addEvent = (res) ->
 
   if createEvent(res, eventName, eventLocation, eventDate)
     res.send ADDED_BY(eventName, user)
-
-  eventFollowup(res, eventName)
 
   return
 
@@ -521,7 +518,11 @@ editEventTime = (res) ->
     res.send TIME_CHANGE_DURING_POLL_FORBIDDEN(user, eventName)
     return
 
+  rsvpCloseDate = new Date(eventDate)
+  rsvpCloseDate.setDate(eventDate.getDate() - 7)
+
   selectedEvent.date = eventDate
+  selectedEvent.rsvpCloseDate = rsvpCloseDate
   eventReminder(res, selectedEvent)
   setRsvpReminder(res, selectedEvent)
 
