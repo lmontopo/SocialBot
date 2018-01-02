@@ -60,7 +60,7 @@ NO_ONE_VOTED = (eventName, creators) -> "#{creators} No one voted in the poll fo
 TIME_CHANGE_DURING_POLL_FORBIDDEN = (user, eventName) -> "@#{user} Wait for poll to end before changing the time for #{eventName}."
 NOT_CREATOR = (user, creators, eventName) -> "@#{user} Only #{creators} can modify #{eventName}."
 CREATOR_BREAK_TIE = (eventName, creators, winners) -> "#{creators} The poll for #{eventName} resulted in a tie. Tag socialbot with one of the winners:\n#{winners}"
-EVENT_FOLLOW_UP = (eventName, creators) -> "#{creators} Who showed up for the #{eventName}?"
+EVENT_FOLLOW_UP = (eventName, creators) -> "#{creators} Who showed up for #{eventName}?"
 SHAME = (eventName, users) -> "SHAME.  You all said you'd show up to #{eventName} and you didn't!\n#{users}"
 
 #
