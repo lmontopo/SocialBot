@@ -13,7 +13,7 @@
 #   SocialBot who's in <event-name> - List people who have RSVPed as going to <event>.
 #   SocialBot organize <event-name> for <date-time> at <place> - Add event to events list and start accepting RSVPs.
 #   SocialBot organize <event-name> with poll at <event-place> for: <comma-separated-choices-of-date-time> - Add event to events list and creates a poll for the event time with choices mentioned.  Poll lasts 24 hours.
-#   SocialBot I'm in for <event-name> - Add yourself to attendees for <event-name>.
+#   SocialBot I'm in <event-name> - Add yourself to attendees for <event-name>.
 #   SocialBot abandon <event-name> - Remove yourself from <event-name>.
 #   SocialBot cancel <event-name> - Remove <event-name> from upcoming events list.
 #   SocialBot (change|set) RSVP deadline for <event-name> to <date-time> - Set an RSVP deadline for <event-name> to be <date-time>. The default deadline is a week before <event> starts.
@@ -572,19 +572,6 @@ eventAttendance = (res) ->
     res.send SHAME(eventName, parseNotify(bailers))
 
 
-test = (res) ->
-  parseOptions({
-    eventName: 'Kelly',
-    options: {
-      'today': 0,
-      'tmr': 0
-    }
-  })
-
-  console.log(schedule.scheduledJobs)
-
-
-
 module.exports = (robot) ->
 
   robot.respond /list/i, listEvents
@@ -603,6 +590,3 @@ module.exports = (robot) ->
   robot.respond /get details ([\w ]+)$/i, getEventDetails
   robot.respond /change ([\w ]+) time to ([\w: ]+)$/i, editEventTime
   robot.respond /The following people showed up to ([\w ]+): ([\w, ]+)$/i, eventAttendance
-
-  # Test
-  robot.respond /test$/i, test
