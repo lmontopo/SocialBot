@@ -12,8 +12,8 @@
 #   SocialBot list - List all upcoming social events.
 #   SocialBot who's in <event-name> - List people who have RSVPed as going to <event>.
 #   SocialBot organize <event-name> for <date-time> at <place> - Add event to events list and start accepting RSVPs.
-#   SocialBot organize <event-name> with poll at <event-place> for <comma-separated-choices-of-date-time> - Add event to events list and creates a poll for the event time with choices mentioned.  Poll lasts 24 hours.
-#   SocialBot I'm in for <event-name> - Add yourself to attendees for <event-name>.
+#   SocialBot organize <event-name> with poll at <event-place> for: <comma-separated-choices-of-date-time> - Add event to events list and creates a poll for the event time with choices mentioned.  Poll lasts 24 hours.
+#   SocialBot I'm in <event-name> - Add yourself to attendees for <event-name>.
 #   SocialBot abandon <event-name> - Remove yourself from <event-name>.
 #   SocialBot cancel <event-name> - Remove <event-name> from upcoming events list.
 #   SocialBot (change|set) RSVP deadline for <event-name> to <date-time> - Set an RSVP deadline for <event-name> to be <date-time>. The default deadline is a week before <event> starts.
@@ -60,7 +60,7 @@ NO_ONE_VOTED = (eventName, creators) -> "#{creators} No one voted in the poll fo
 TIME_CHANGE_DURING_POLL_FORBIDDEN = (user, eventName) -> "@#{user} Wait for poll to end before changing the time for #{eventName}."
 NOT_CREATOR = (user, creators, eventName) -> "@#{user} Only #{creators} can modify #{eventName}."
 CREATOR_BREAK_TIE = (eventName, creators, winners) -> "#{creators} The poll for #{eventName} resulted in a tie. Tag socialbot with one of the winners:\n#{winners}"
-EVENT_FOLLOW_UP = (eventName, creators) -> "#{creators} Who showed up for the <event-name> yesterday?"
+EVENT_FOLLOW_UP = (eventName, creators) -> "#{creators} Who showed up for #{eventName}?"
 SHAME = (eventName, users) -> "SHAME.  You all said you'd show up to #{eventName} and you didn't!\n#{users}"
 
 #
@@ -92,7 +92,7 @@ createEvent = (res, eventName, eventLocation, eventDate = undefined) ->
   rsvpCloseDate = undefined
 
   if eventDate
-    rsvpCloseDate = new Date()
+    rsvpCloseDate = new Date(eventDate)
     rsvpCloseDate.setDate(eventDate.getDate() - 7)
 
   newEvent = {
@@ -110,6 +110,7 @@ createEvent = (res, eventName, eventLocation, eventDate = undefined) ->
   if eventDate
     eventReminder(res, newEvent)
     setRsvpReminder(res, newEvent)
+    eventFollowup(res, eventName)
 
   return true
 
@@ -244,8 +245,8 @@ closePoll = (res, poll) ->
     if winners.length == 1
       selectedEvent.date = winner
       res.send POLL_CLOSED(eventName, getDateReadable(winner))
-      eventReminder(res, eventName)
-      setRsvpReminder(res, eventName)
+      eventReminder(res, selectedEvent)
+      setRsvpReminder(res, selectedEvent)
 
     else
       res.send CREATOR_BREAK_TIE(eventName, creators, parseWinningDates(eventName, winners))
@@ -262,9 +263,7 @@ eventFollowup = (res, eventName) ->
   jobName = "#{eventName}_WHO_ATTENDED"
 
   cancelScheduledJob(jobName)
-
   schedule.scheduleJob jobName, date, () -> res.send(EVENT_FOLLOW_UP(eventName, creators))
-
 
 
 #
@@ -281,7 +280,7 @@ listEvents = (res) ->
   startOfToday.setHours(0,0,0,0)
   for e in allEventNames
     eventObj = getEvent(e, res.robot.brain)
-    if getDate(eventObj.date) > startOfToday
+    if getDate(eventObj.date) >= startOfToday
       currentEvents.push(eventObj)
 
   res.send parseEvents(currentEvents)
@@ -307,8 +306,6 @@ addEvent = (res) ->
 
   if createEvent(res, eventName, eventLocation, eventDate)
     res.send ADDED_BY(eventName, user)
-
-  eventFollowup(res, eventName)
 
   return
 
@@ -346,7 +343,7 @@ joinEvent = (res) ->
     return
 
   selectedEvent.attendees.push(user)
-  res.send NOW_ATTENDING(eventName)
+  res.send NOW_ATTENDING(user, eventName)
 
 addCreator = (res) ->
   newCreator = res.match[1].trim()
@@ -521,9 +518,13 @@ editEventTime = (res) ->
     res.send TIME_CHANGE_DURING_POLL_FORBIDDEN(user, eventName)
     return
 
+  rsvpCloseDate = new Date(eventDate)
+  rsvpCloseDate.setDate(eventDate.getDate() - 7)
+
   selectedEvent.date = eventDate
-  eventReminder(res, eventName)
-  setRsvpReminder(res, eventName)
+  selectedEvent.rsvpCloseDate = rsvpCloseDate
+  eventReminder(res, selectedEvent)
+  setRsvpReminder(res, selectedEvent)
 
   res.send EVENT_DESCRIPTION(user, eventName, selectedEvent)
 
@@ -551,14 +552,13 @@ vote = (res) ->
 
 eventAttendance = (res) ->
   user = getUsername(res)
+  eventName = res.match[1].trim()
+  selectedEvent = getEvent(eventName, res.robot.brain)
 
   if user not in selectedEvent.creators
     creators = parseCreators(selectedEvent)
     res.send NOT_CREATOR(user, creators, eventName)
     return
-
-  eventName = res.match[1].trim()
-  selectedEvent = getEvent(eventName, res.robot.brain)
 
   if !selectedEvent
     res.send NO_SUCH_EVENT(eventName)
@@ -566,19 +566,10 @@ eventAttendance = (res) ->
 
   actualAttendees = res.match[2].trim().split(',')
   eventAttendees = selectedEvent.attendees
-  bailers = (user for user in eventAttendees if user not in actualAttendees)
+  bailers = (user for user in eventAttendees when user not in actualAttendees)
 
-  res.send SHAME(eventName, parseNotify(bailers))
-
-
-test = (res) ->
-  parseOptions({
-    eventName: 'Kelly',
-    options: {
-      'today': 0,
-      'tmr': 0
-    }
-  })
+  if bailers.length > 0
+    res.send SHAME(eventName, parseNotify(bailers))
 
 
 module.exports = (robot) ->
@@ -599,6 +590,3 @@ module.exports = (robot) ->
   robot.respond /get details ([\w ]+)$/i, getEventDetails
   robot.respond /change ([\w ]+) time to ([\w: ]+)$/i, editEventTime
   robot.respond /The following people showed up to ([\w ]+): ([\w, ]+)$/i, eventAttendance
-
-  # Test
-  robot.respond /test$/i, test
