@@ -110,7 +110,7 @@ createEvent = (res, eventName, eventLocation, eventDate = undefined) ->
   if eventDate
     eventReminder(res, newEvent)
     setRsvpReminder(res, newEvent)
-    eventFollowup(res, eventName)
+    eventFollowup(res, newEvent)
 
   return true
 
@@ -253,9 +253,8 @@ closePoll = (res, poll) ->
 
   delete getFromRedis(res.robot.brain, 'polls')[eventName]
 
-eventFollowup = (res, eventName) ->
+eventFollowup = (res, selectedEvent) ->
   # create a job to follow up with creator the day after an event to ask who showed
-  selectedEvent = getEvent(eventName, res.robot.brain)
   creators = parseNotify(selectedEvent.creators)
   date = getDate(selectedEvent.date)
   date.setDate(date.getDate() + 1)
@@ -523,8 +522,10 @@ editEventTime = (res) ->
 
   selectedEvent.date = eventDate
   selectedEvent.rsvpCloseDate = rsvpCloseDate
+
   eventReminder(res, selectedEvent)
   setRsvpReminder(res, selectedEvent)
+  eventFollowup(res, selectedEvent)
 
   res.send EVENT_DESCRIPTION(user, eventName, selectedEvent)
 
