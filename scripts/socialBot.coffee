@@ -259,10 +259,10 @@ eventFollowup = (res, selectedEvent) ->
   date = getDate(selectedEvent.date)
   date.setDate(date.getDate() + 1)
 
-  jobName = "#{eventName}_WHO_ATTENDED"
+  jobName = "#{selectedEvent.name}_WHO_ATTENDED"
 
   cancelScheduledJob(jobName)
-  schedule.scheduleJob jobName, date, () -> res.send(EVENT_FOLLOW_UP(eventName, creators))
+  schedule.scheduleJob jobName, date, () -> res.send(EVENT_FOLLOW_UP(selectedEvent.name, creators))
 
 
 #
