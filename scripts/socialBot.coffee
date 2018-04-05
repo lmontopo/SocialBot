@@ -89,12 +89,6 @@ createEvent = (res, eventName, eventLocation, eventDate = undefined) ->
     res.send ALREADY_EXISTS(eventName)
     return false
 
-  rsvpCloseDate = undefined
-
-  if eventDate
-    rsvpCloseDate = new Date(eventDate)
-    rsvpCloseDate.setDate(eventDate.getDate() - 7)
-
   newEvent = {
     'name': eventName,
     'description': '',
@@ -102,14 +96,13 @@ createEvent = (res, eventName, eventLocation, eventDate = undefined) ->
     'date': eventDate,
     'attendees': [user],
     'creators': [user],
-    'rsvpCloseDate': rsvpCloseDate
+    'rsvpCloseDate': undefined
   }
 
   currentEvents[eventName] = newEvent
 
   if eventDate
     eventReminder(res, newEvent)
-    setRsvpReminder(res, newEvent)
     eventFollowup(res, newEvent)
 
   return true
@@ -435,6 +428,10 @@ editRSVP = (res) ->
   newDeadline = chrono.parseDate(res.match[3].trim())
   selectedEvent = getEvent(eventName, res.robot.brain)
 
+  if !selectedEvent
+    res.send NO_SUCH_EVENT(eventName)
+    return
+
   if user not in selectedEvent.creators
     creators = parseCreators(selectedEvent)
     res.send NOT_CREATOR(user, creators, eventName)
@@ -517,14 +514,9 @@ editEventTime = (res) ->
     res.send TIME_CHANGE_DURING_POLL_FORBIDDEN(user, eventName)
     return
 
-  rsvpCloseDate = new Date(eventDate)
-  rsvpCloseDate.setDate(eventDate.getDate() - 7)
-
   selectedEvent.date = eventDate
-  selectedEvent.rsvpCloseDate = rsvpCloseDate
 
   eventReminder(res, selectedEvent)
-  setRsvpReminder(res, selectedEvent)
   eventFollowup(res, selectedEvent)
 
   res.send EVENT_DESCRIPTION(user, eventName, selectedEvent)
