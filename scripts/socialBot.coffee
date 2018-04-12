@@ -288,6 +288,10 @@ listUsers = (res) ->
 addEvent = (res) ->
   eventName = res.match[1].trim()
   eventDate = chrono.parseDate(res.match[2].trim())
+
+  if eventDate < new Date()
+    eventDate.setDate(eventDate.getDate() + 7)
+
   eventLocation = res.match[3].trim()
   currentEvents = getFromRedis(res.robot.brain, 'events')
   user = getUsername(res)
