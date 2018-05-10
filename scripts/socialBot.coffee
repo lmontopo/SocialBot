@@ -130,6 +130,24 @@ createPoll = (res, eventName, eventDateOptions) ->
 getDate = (dateString) ->
   return new Date(dateString)
 
+getFutureDate = (rawDate) ->
+  """
+  Return a date object from the rawDate which ensures
+  the event is not on a day in the past.
+  """
+  dateObject = chrono.parseDate(rawDate)
+
+  clonedDate = new Date(dateObject.getTime())
+  clonedDate.setHours(0,0,0,0)
+
+  currentDate = new Date()
+  currentDate.setHours(0,0,0,0)
+
+  if clonedDate < currentDate
+    dateObject.setDate(dateObject.getDate() + 7)
+
+  return dateObject
+
 getDateReadable = (dateString) ->
   if dateString is undefined
     return 'Undecided date and time'
@@ -287,7 +305,8 @@ listUsers = (res) ->
 
 addEvent = (res) ->
   eventName = res.match[1].trim()
-  eventDate = chrono.parseDate(res.match[2].trim())
+  eventDate = getFutureDate(res.match[2].trim())
+
   eventLocation = res.match[3].trim()
   currentEvents = getFromRedis(res.robot.brain, 'events')
   user = getUsername(res)
@@ -425,7 +444,7 @@ forceRemind = (res) ->
 editRSVP = (res) ->
   eventName = res.match[2].trim()
   user = getUsername(res)
-  newDeadline = chrono.parseDate(res.match[3].trim())
+  newDeadline = getFutureDate(res.match[3].trim())
   selectedEvent = getEvent(eventName, res.robot.brain)
 
   if !selectedEvent
@@ -492,7 +511,7 @@ getEventDetails = (res) ->
 
 editEventTime = (res) ->
   eventName = res.match[1].trim()
-  eventDate = chrono.parseDate(res.match[2].trim())
+  eventDate = getFutureDate(res.match[2].trim())
   selectedEvent = getEvent(eventName, res.robot.brain)
   poll = getPoll(eventName, res.robot.brain)
   user = getUsername(res)
