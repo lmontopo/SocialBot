@@ -606,21 +606,29 @@ eventAttendance = (res) ->
     res.send SHAME(eventName, parseNotify(bailers))
 
 
+createRegex = (str) ->
+  """Add optional period to end of regex."""
+  return new RegExp(str + '\\.{0,1}$', 'i')
+
+createQuestionRegex = (str) ->
+  """Add optional question mark to end of regex."""
+  return new RegExp(str + '\\?{0,1}$', 'i')
+
 module.exports = (robot) ->
 
-  robot.respond /list/i, listEvents
-  robot.respond /vote ([\w: ]+) for ([\w ]+)$/i, vote
-  robot.respond /organize ([\w ]+) with poll at ([\w ]+) for: ([\w:, ]+)$/i, addEventWithPoll
-  robot.respond /organize ([\w ]+) for ([\w: ]+) at ([\w ]+)$/i, addEvent
-  robot.respond /I'm in ([\w ]+)$/i, joinEvent
-  robot.respond /abandon ([\w ]+)$/i, abandonEvent
-  robot.respond /who's in ([\w ]+)$/i, listUsers
-  robot.respond /cancel ([\w ]+)$/i, cancelEvent
-  robot.respond /(change|set) RSVP deadline for ([\w ]+) to ([\w: ]+)$/i, editRSVP
-  robot.respond /remind about ([\w ]+$)/i, forceRemind
-  robot.respond /tell ([\w ]+) attendees \"(.+)\"$/i, notifyAllAttendees
-  robot.respond /add creator ([\w ]+) to ([\w ]+)/i, addCreator
-  robot.respond /add description to ([\w ]+): (.+)$/i, addDescription
-  robot.respond /get details ([\w ]+)$/i, getEventDetails
-  robot.respond /change ([\w ]+) time to ([\w: ]+)$/i, editEventTime
-  robot.respond /The following people showed up to ([\w ]+): ([\w, ]+)$/i, eventAttendance
+  robot.respond createRegex('list'), listEvents
+  robot.respond createRegex('vote ([\\w: ]+) for ([\\w ]+)'), vote
+  robot.respond createRegex('organize ([\\w ]+) with poll at ([\\w ]+) for: ([\\w:, ]+)'), addEventWithPoll
+  robot.respond createRegex('organize ([\\w ]+) for ([\\w: ]+) at ([\\w ]+)'), addEvent
+  robot.respond createRegex('I\'m in ([\\w ]+)'), joinEvent
+  robot.respond createRegex('abandon ([\\w ]+)'), abandonEvent
+  robot.respond createQuestionRegex('who\'s in ([\\w ]+)'), listUsers
+  robot.respond createRegex('cancel ([\\w ]+)'), cancelEvent
+  robot.respond createRegex('(change|set) RSVP deadline for ([\w ]+) to ([\\w: ]+)'), editRSVP
+  robot.respond createRegex('remind about ([\w ]+)'), forceRemind
+  robot.respond createRegex('tell ([\\w ]+) attendees \"(.+)\"'), notifyAllAttendees
+  robot.respond createRegex('add creator ([\\w ]+) to ([\\w ]+)'), addCreator
+  robot.respond createRegex('add description to ([\\w ]+): (.+)'), addDescription
+  robot.respond createRegex('get details ([\\w ]+)'), getEventDetails
+  robot.respond createRegex('change ([\\w ]+) time to ([\\w: ]+)'), editEventTime
+  robot.respond createRegex('The following people showed up to ([\\w ]+): ([\\w, ]+)'), eventAttendance
