@@ -1,13 +1,3 @@
-# Description:
-#   Example scripts for you to examine and try out.
-#
-# Notes:
-#   They are commented out by default, because most of them are pretty silly and
-#   wouldn't be useful and amusing enough for day to day huboting.
-#   Uncomment the ones you want to try and experiment with.
-#
-#   These are from the scripting documentation: https://github.com/github/hubot/blob/master/docs/scripting.md
-#
 #Commands:
 #   SocialBot list - List all upcoming social events.
 #   SocialBot who's in <event-name> - List people who have RSVPed as going to <event>.
@@ -82,6 +72,14 @@ getFromRedis = (brain, key) ->
   return brain.get(key)
 
 createEvent = (res, eventName, eventLocation, eventDate = undefined) ->
+  """
+  Perform checks to ensure event makes sense, and if so,
+  create new event under currentEvents key in redis.
+
+  Return true if event creation was successful.
+  Return false otherwise.
+  """
+
   currentEvents = getFromRedis(res.robot.brain, 'events')
   user = getUsername(res)
 
@@ -128,6 +126,12 @@ createPoll = (res, eventName, eventDateOptions) ->
   return true
 
 getDate = (dateString) ->
+  """
+  Return Javascript Date object corresponding to ISO-8601 Date String.
+
+  Example:
+    '2018-04-18T16:00:00.000Z' -> Wed Apr 18 2018 12:00:00 GMT-0400 (EDT)
+  """
   return new Date(dateString)
 
 getFutureDate = (rawDate) ->
@@ -149,6 +153,9 @@ getFutureDate = (rawDate) ->
   return dateObject
 
 getDateReadable = (dateString) ->
+  """
+  Convert ISO-8601 date string to readable date string.
+  """
   if dateString is undefined
     return 'Undecided date and time'
 
@@ -159,6 +166,9 @@ getUsername = (res) ->
   return res.message.user.name
 
 parseEvents = (results) ->
+  """
+  Return readable list of events.
+  """
   if results.length == 0
     return NO_EVENTS()
   parsedResults = ["Upcoming Social Events:"]
@@ -167,14 +177,26 @@ parseEvents = (results) ->
     parsedResults.push eventString
   return parsedResults.join('\n')
 
-parseUsers = (event) ->
-  return event.attendees.join(', ')
-
 parseNotify = (users) ->
+  """
+  Create a message string that will 'ping' each user
+  in the users list.
+  """
   users = ('@' + user for user in users)
   return users.join(', ')
 
+parseUsers = (event) ->
+  """
+  Return comma-separated string of usernames
+  corresponding to the users attending the event.
+  """
+  return event.attendees.join(', ')
+
 parseCreators = (event) ->
+  """
+  Return coma-separated string of usernames
+  corresponding to the creators of event.
+  """
   return event.creators.join(', ')
 
 parseOptions = (poll) ->
