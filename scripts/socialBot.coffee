@@ -71,6 +71,39 @@ getFromRedis = (brain, key) ->
 
   return brain.get(key)
 
+getICSDate = (dateString) ->
+  iso_date = dateString.replace /[-:]/g, ""
+
+  return iso_date.split('.')[0]
+
+icsFormat = (res) ->
+
+  eventName = res.match[1].trim()
+  {
+    name,
+    description,
+    location,
+    date
+  } = getEvent(eventName, res.robot.brain)
+
+  ics_fields = [
+    # Global calendar fields
+    "BEGIN:VCALENDAR",
+    "VERSION:2.0",
+    # Calendar event fields
+    "BEGIN:VEVENT",
+    "LOCATION:#{location}",
+    "DESCRIPTION:#{description}",
+    "SUMMARY:#{name}",
+    "DTSTART:#{getICSDate(date)}",
+    "END:VEVENT",
+    # End of calendar event fields
+    "END:VCALENDAR"
+    # End of global calendar fields
+  ]
+
+  res.send ics_fields.join('\n')
+
 createEvent = (res, eventName, eventLocation, eventDate = undefined) ->
   """
   Perform checks to ensure event makes sense, and if so,
@@ -608,6 +641,7 @@ eventAttendance = (res) ->
 
 module.exports = (robot) ->
 
+  robot.respond /test ([\w: ]+)/i, icsFormat
   robot.respond /list/i, listEvents
   robot.respond /vote ([\w: ]+) for ([\w ]+)$/i, vote
   robot.respond /organize ([\w ]+) with poll at ([\w ]+) for: ([\w:, ]+)$/i, addEventWithPoll
