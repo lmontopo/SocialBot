@@ -19,6 +19,11 @@
 
 chrono = require 'chrono-node'
 schedule = require 'node-schedule'
+{ WebClient } = require '@slack/client'
+
+# Required for using Slack's API
+web = new WebClient process.env.HUBOT_SLACK_TOKEN
+
 
 NO_SUCH_EVENT = (eventName) -> "An event with the name #{eventName} does not exist."
 ALREADY_EXISTS = (eventName) -> "An event with the name #{eventName} already exists."
@@ -71,38 +76,42 @@ getFromRedis = (brain, key) ->
 
   return brain.get(key)
 
-getICSDate = (dateString) ->
-  iso_date = dateString.replace /[-:]/g, ""
+getICSDate = (dateObject) ->
+  """
+  Return a date string that is in the format expected by ics files.
+
+  Example: '2018-04-18T16:00:00.000Z' -> '20180418T160000'
+  """
+  iso_date = dateObject.toISOString().replace /[-:]/g, ""
 
   return iso_date.split('.')[0]
 
-icsFormat = (res) ->
+icsFileContent = (res, eventName) ->
 
-  eventName = res.match[1].trim()
   {
     name,
     description,
     location,
-    date
+    date,
+    #dateEnd, Uncomment when implemented in issue #26
   } = getEvent(eventName, res.robot.brain)
 
+
+
   ics_fields = [
-    # Global calendar fields
     "BEGIN:VCALENDAR",
     "VERSION:2.0",
-    # Calendar event fields
     "BEGIN:VEVENT",
     "LOCATION:#{location}",
     "DESCRIPTION:#{description}",
     "SUMMARY:#{name}",
     "DTSTART:#{getICSDate(date)}",
+    # "DTEND:#{getICSDate(dateEnd)}", Uncomment when implemented in issue #26
     "END:VEVENT",
-    # End of calendar event fields
     "END:VCALENDAR"
-    # End of global calendar fields
   ]
 
-  res.send ics_fields.join('\n')
+  return ics_fields.join('\n')
 
 createEvent = (res, eventName, eventLocation, eventDate = undefined) ->
   """
@@ -371,7 +380,29 @@ addEvent = (res) ->
     return
 
   if createEvent(res, eventName, eventLocation, eventDate)
-    res.send ADDED_BY(eventName, user)
+    filename = "#{eventName}.ics"
+    file_content = icsFileContent(res, eventName)
+
+    file_opts = {
+      filename: filename,
+      content: file_content
+    }
+
+    # Uncomment to print the resulting file content
+    # and paste into a text editor to test that the
+    # file is a valid .ics format.
+    # console.log(file_content)
+
+    web.files.upload(file_opts)
+      # TODO: In the console I am able to see the file id,
+      # which makes me feel like the upload was successful,
+      # but the response in Slack does not show a file.
+      # Need to figure out what I'm missing.
+      # For future reference, I was following these docs:
+      # https://slackapi.github.io/node-slack-sdk/web_api
+      .then((res) => console.error(res.file.id))
+      .catch((error) => console.error(error))
+    res.send ADDED_BY(eventName, user);
 
   return
 
@@ -641,7 +672,6 @@ eventAttendance = (res) ->
 
 module.exports = (robot) ->
 
-  robot.respond /test ([\w: ]+)/i, icsFormat
   robot.respond /list/i, listEvents
   robot.respond /vote ([\w: ]+) for ([\w ]+)$/i, vote
   robot.respond /organize ([\w ]+) with poll at ([\w ]+) for: ([\w:, ]+)$/i, addEventWithPoll
