@@ -87,7 +87,10 @@ getICSDate = (dateObject) ->
   return iso_date.split('.')[0]
 
 icsFileContent = (res, eventName) ->
-
+  """
+  Get the event given eventName and parse out the event
+  details into a valid .ics file format.
+  """
   {
     name,
     description,
@@ -95,8 +98,6 @@ icsFileContent = (res, eventName) ->
     date,
     #dateEnd, Uncomment when implemented in issue #26
   } = getEvent(eventName, res.robot.brain)
-
-
 
   ics_fields = [
     "BEGIN:VCALENDAR",
