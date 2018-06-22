@@ -19,6 +19,11 @@
 
 chrono = require 'chrono-node'
 schedule = require 'node-schedule'
+{ WebClient } = require '@slack/client'
+
+# Required for using Slack's API
+web = new WebClient process.env.HUBOT_SLACK_TOKEN
+
 
 NO_SUCH_EVENT = (eventName) -> "An event with the name #{eventName} does not exist."
 ALREADY_EXISTS = (eventName) -> "An event with the name #{eventName} already exists."
@@ -70,6 +75,44 @@ getFromRedis = (brain, key) ->
     brain.set(key, {})
 
   return brain.get(key)
+
+getICSDate = (dateObject) ->
+  """
+  Return a date string that is in the format expected by ics files.
+
+  Example: '2018-04-18T16:00:00.000Z' -> '20180418T160000'
+  """
+  iso_date = dateObject.toISOString().replace /[-:]/g, ""
+
+  return iso_date.split('.')[0]
+
+icsFileContent = (res, eventName) ->
+  """
+  Get the event given eventName and parse out the event
+  details into a valid .ics file format.
+  """
+  {
+    name,
+    description,
+    location,
+    date,
+    #dateEnd, Uncomment when implemented in issue #26
+  } = getEvent(eventName, res.robot.brain)
+
+  ics_fields = [
+    "BEGIN:VCALENDAR",
+    "VERSION:2.0",
+    "BEGIN:VEVENT",
+    "LOCATION:#{location}",
+    "DESCRIPTION:#{description}",
+    "SUMMARY:#{name}",
+    "DTSTART:#{getICSDate(date)}",
+    # "DTEND:#{getICSDate(dateEnd)}", Uncomment when implemented in issue #26
+    "END:VEVENT",
+    "END:VCALENDAR"
+  ]
+
+  return ics_fields.join('\n')
 
 createEvent = (res, eventName, eventLocation, eventDate = undefined) ->
   """
@@ -338,7 +381,29 @@ addEvent = (res) ->
     return
 
   if createEvent(res, eventName, eventLocation, eventDate)
-    res.send ADDED_BY(eventName, user)
+    filename = "#{eventName}.ics"
+    file_content = icsFileContent(res, eventName)
+
+    file_opts = {
+      filename: filename,
+      content: file_content
+    }
+
+    # Uncomment to print the resulting file content
+    # and paste into a text editor to test that the
+    # file is a valid .ics format.
+    # console.log(file_content)
+
+    web.files.upload(file_opts)
+      # TODO: In the console I am able to see the file id,
+      # which makes me feel like the upload was successful,
+      # but the response in Slack does not show a file.
+      # Need to figure out what I'm missing.
+      # For future reference, I was following these docs:
+      # https://slackapi.github.io/node-slack-sdk/web_api
+      .then((res) => console.error(res.file.id))
+      .catch((error) => console.error(error))
+    res.send ADDED_BY(eventName, user);
 
   return
 
